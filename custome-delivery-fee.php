@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Envío Personalizado con Fee (Configurable)
  * Description: Campos de fecha, tipo de envío, zona y dirección en checkout, con configuración de zonas editable desde el admin.
- * Version: 3.0.5
+ * Version: 3.0.6
  * Author: Keneric / ChatGPT
  * Text Domain: envio-fee
  */
@@ -66,6 +66,13 @@ function envio_fee_get_zones() {
     }
     return $zones;
 }
+
+// Enqueue Dashicons for frontend
+add_action('wp_enqueue_scripts', function(){
+    if (is_checkout()) {
+        wp_enqueue_style('dashicons');
+    }
+});
 
 // Admin menu
 add_action('admin_menu', function() {
@@ -157,20 +164,44 @@ add_action('woocommerce_review_order_after_payment', function(){
     $zones = envio_fee_get_zones();
     ?>
     <div id="envio-fee-fields">
-        <p>
-            <label for="fecha_envio_custom"><?php _e('Fecha de envío', 'envio-fee'); ?> *</label>
-            <input type="date" id="fecha_envio_custom" name="fecha_envio_custom" class="update_totals_on_change" min="<?php echo esc_attr($hoy); ?>" required>
+        <style>
+            #envio-fee-fields label {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            #envio-fee-fields .dashicons {
+                font-size: 18px;
+                width: 18px;
+                height: 18px;
+                color: #666;
+            }
+        </style>
+        <p class="form-row form-row-wide validate-required">
+            <label for="fecha_envio_custom" class="">
+                <span class="dashicons dashicons-calendar-alt"></span>
+                <?php _e('Fecha de envío', 'envio-fee'); ?>
+                <abbr class="required" title="required">*</abbr>
+            </label>
+            <input type="date" id="fecha_envio_custom" name="fecha_envio_custom" class="input-text update_totals_on_change" min="<?php echo esc_attr($hoy); ?>" required aria-required="true">
         </p>
-        <p>
-            <label for="custom_shipping_type"><?php _e('Tipo de envío', 'envio-fee'); ?></label>
+        <p class="form-row form-row-wide">
+            <label for="custom_shipping_type">
+                <span class="dashicons dashicons-cart"></span>
+                <?php _e('Tipo de envío', 'envio-fee'); ?>
+            </label>
             <select id="custom_shipping_type" name="custom_shipping_type" class="update_totals_on_change" required>
                 <option value="retiro"><?php _e('Retiro en tienda (gratis)', 'envio-fee'); ?></option>
                 <option value="delivery"><?php _e('Delivery', 'envio-fee'); ?></option>
             </select>
         </p>
-        <p class="delivery-only" style="display:none;">
-            <label for="custom_shipping_zone"><?php _e('Zona de envío', 'envio-fee'); ?></label>
-            <select id="custom_shipping_zone" name="custom_shipping_zone" class="update_totals_on_change">
+        <p class="form-row form-row-wide delivery-only validate-required" style="display:none;">
+            <label for="custom_shipping_zone" class="">
+                <span class="dashicons dashicons-location-alt"></span>
+                <?php _e('Zona de envío', 'envio-fee'); ?>
+                <abbr class="required" title="required">*</abbr>
+            </label>
+            <select id="custom_shipping_zone" name="custom_shipping_zone" class="select update_totals_on_change" aria-required="true">
                 <option value=""><?php _e('Selecciona tu zona…', 'envio-fee'); ?></option>
                 <?php foreach ($zones as $key=>$zone): if($zone['activo']): ?>
                     <option value="<?php echo esc_attr($key); ?>">
@@ -179,19 +210,25 @@ add_action('woocommerce_review_order_after_payment', function(){
                 <?php endif; endforeach; ?>
             </select>
         </p>
-        <p class="delivery-only" style="display:none;">
-            <label for="direccion_delivery_custom"><?php _e('Dirección de entrega', 'envio-fee'); ?></label>
-            <input type="text" id="direccion_delivery_custom" name="direccion_delivery_custom" class="update_totals_on_change">
+        <p class="form-row form-row-wide delivery-only validate-required" style="display:none;">
+            <label for="direccion_delivery_custom" class="">
+                <span class="dashicons dashicons-location"></span>
+                <?php _e('Dirección de entrega', 'envio-fee'); ?>
+                <abbr class="required" title="required">*</abbr>
+            </label>
+            <input type="text" id="direccion_delivery_custom" name="direccion_delivery_custom" class="input-text update_totals_on_change" aria-required="true">
         </p>
         <script>
         (function($){
             function toggleDeliveryFields(){
                 if($('#custom_shipping_type').val()=='delivery'){
                     $('.delivery-only').show();
-                    $('#custom_shipping_zone, #direccion_delivery_custom').attr('required', true);
+                    $('#custom_shipping_zone, #direccion_delivery_custom').attr('required', true).attr('aria-required', 'true');
+                    $('.delivery-only').addClass('validate-required');
                 } else {
                     $('.delivery-only').hide();
-                    $('#custom_shipping_zone, #direccion_delivery_custom').removeAttr('required');
+                    $('#custom_shipping_zone, #direccion_delivery_custom').removeAttr('required').removeAttr('aria-required');
+                    $('.delivery-only').removeClass('validate-required');
                 }
             }
             var debounceTimer;
@@ -232,12 +269,27 @@ add_action('woocommerce_checkout_update_order_review', function($post_data){
 // Validation
 add_action('woocommerce_checkout_process', function(){
     $tipo = sanitize_text_field($_POST['custom_shipping_type'] ?? '');
+    
+    // Validar fecha de envío (obligatoria siempre)
     if (empty($_POST['fecha_envio_custom'])) {
         wc_add_notice(__('Por favor selecciona la fecha de envío.', 'envio-fee'), 'error');
+    } else {
+        // Validar que la fecha sea válida y no sea anterior a hoy
+        $fecha = sanitize_text_field($_POST['fecha_envio_custom']);
+        $hoy = date('Y-m-d');
+        if ($fecha < $hoy) {
+            wc_add_notice(__('La fecha de envío no puede ser anterior a hoy.', 'envio-fee'), 'error');
+        }
     }
+    
+    // Validar campos obligatorios cuando es delivery
     if ($tipo === 'delivery') {
-        if (empty($_POST['custom_shipping_zone'])) wc_add_notice(__('Selecciona tu zona de envío.', 'envio-fee'), 'error');
-        if (empty($_POST['direccion_delivery_custom'])) wc_add_notice(__('Indica la dirección de entrega.', 'envio-fee'), 'error');
+        if (empty($_POST['custom_shipping_zone'])) {
+            wc_add_notice(__('Selecciona tu zona de envío.', 'envio-fee'), 'error');
+        }
+        if (empty($_POST['direccion_delivery_custom'])) {
+            wc_add_notice(__('Indica la dirección de entrega.', 'envio-fee'), 'error');
+        }
     }
 });
 
