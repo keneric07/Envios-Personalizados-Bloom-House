@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Envío Personalizado con Fee (Configurable)
  * Description: Campos de fecha, tipo de envío, zona y dirección en checkout, con configuración de zonas editable desde el admin.
- * Version: 3.0.6
+ * Version: 3.0.7
  * Author: Keneric / ChatGPT
  * Text Domain: envio-fee
  */
@@ -369,15 +369,36 @@ add_action('woocommerce_checkout_create_order', function($order, $data){
     $fecha_envio = sanitize_text_field($_POST['fecha_envio_custom'] ?? '');
     $direccion_delivery = sanitize_text_field($_POST['direccion_delivery_custom'] ?? '');
     
+    // Copiar direcciones de facturación a envío
+    $billing_address_1 = $order->get_billing_address_1();
+    $billing_address_2 = $order->get_billing_address_2();
+    
+    // Establecer dirección 1 de envío igual a facturación
+    if (!empty($billing_address_1)) {
+        $order->set_shipping_address_1($billing_address_1);
+    }
+    
+    // Establecer dirección 2 de envío igual a facturación
+    if (!empty($billing_address_2)) {
+        $order->set_shipping_address_2($billing_address_2);
+    }
+    
     // Formatear fecha en español
     $fecha_formateada = envio_fee_format_date_spanish($fecha_envio);
     
-    // Guardar fecha formateada en dirección 2 (para ambos tipos)
+    // Agregar fecha formateada a dirección 2 (combinar con dirección 2 de facturación si existe)
     if (!empty($fecha_formateada)) {
-        $order->set_shipping_address_2($fecha_formateada);
+        $direccion_2_actual = $order->get_shipping_address_2();
+        if (!empty($direccion_2_actual)) {
+            // Si ya hay dirección 2, combinar con fecha
+            $order->set_shipping_address_2($direccion_2_actual . ' | ' . $fecha_formateada);
+        } else {
+            // Si no hay dirección 2, solo poner la fecha
+            $order->set_shipping_address_2($fecha_formateada);
+        }
     }
     
-    // Guardar dirección 1 según el tipo de envío
+    // Sobrescribir dirección 1 según el tipo de envío
     if ($tipo_envio === 'delivery' && !empty($direccion_delivery)) {
         $order->set_shipping_address_1($direccion_delivery);
     } elseif ($tipo_envio === 'retiro') {
