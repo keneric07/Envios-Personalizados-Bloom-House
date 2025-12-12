@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Envío Personalizado con Fee (Configurable)
  * Description: Campos de fecha, tipo de envío, zona y dirección en checkout, con configuración de zonas editable desde el admin.
- * Version: 3.0.3
+ * Version: 3.0.5
  * Author: Keneric / ChatGPT
  * Text Domain: envio-fee
  */
@@ -259,10 +259,82 @@ add_action('woocommerce_cart_calculate_fees', function($cart){
     }
 }, 20, 1);
 
+// Format date in Spanish
+function envio_fee_format_date_spanish($date) {
+    if (empty($date)) {
+        return '';
+    }
+    
+    // Arrays de traducción
+    $dias = array(
+        'Sunday' => 'domingo',
+        'Monday' => 'lunes',
+        'Tuesday' => 'martes',
+        'Wednesday' => 'miércoles',
+        'Thursday' => 'jueves',
+        'Friday' => 'viernes',
+        'Saturday' => 'sábado'
+    );
+    
+    $meses = array(
+        'January' => 'enero',
+        'February' => 'febrero',
+        'March' => 'marzo',
+        'April' => 'abril',
+        'May' => 'mayo',
+        'June' => 'junio',
+        'July' => 'julio',
+        'August' => 'agosto',
+        'September' => 'septiembre',
+        'October' => 'octubre',
+        'November' => 'noviembre',
+        'December' => 'diciembre'
+    );
+    
+    // Convertir fecha a timestamp
+    $timestamp = strtotime($date);
+    if ($timestamp === false) {
+        return '';
+    }
+    
+    // Obtener día de la semana y mes en inglés
+    $dia_semana_eng = date('l', $timestamp);
+    $mes_eng = date('F', $timestamp);
+    $dia = date('j', $timestamp);
+    $ano = date('Y', $timestamp);
+    
+    // Traducir a español
+    $dia_semana_esp = isset($dias[$dia_semana_eng]) ? ucfirst($dias[$dia_semana_eng]) : $dia_semana_eng;
+    $mes_esp = isset($meses[$mes_eng]) ? $meses[$mes_eng] : $mes_eng;
+    
+    return sprintf('Enviar el día: %s %d de %s de %s', $dia_semana_esp, $dia, $mes_esp, $ano);
+}
+
 // Save order meta
 add_action('woocommerce_checkout_create_order', function($order, $data){
-    $order->update_meta_data('_fecha_envio_custom', sanitize_text_field($_POST['fecha_envio_custom'] ?? ''));
-    $order->update_meta_data('_custom_shipping_type', sanitize_text_field($_POST['custom_shipping_type'] ?? ''));
+    // Obtener datos del formulario
+    $tipo_envio = sanitize_text_field($_POST['custom_shipping_type'] ?? '');
+    $fecha_envio = sanitize_text_field($_POST['fecha_envio_custom'] ?? '');
+    $direccion_delivery = sanitize_text_field($_POST['direccion_delivery_custom'] ?? '');
+    
+    // Formatear fecha en español
+    $fecha_formateada = envio_fee_format_date_spanish($fecha_envio);
+    
+    // Guardar fecha formateada en dirección 2 (para ambos tipos)
+    if (!empty($fecha_formateada)) {
+        $order->set_shipping_address_2($fecha_formateada);
+    }
+    
+    // Guardar dirección 1 según el tipo de envío
+    if ($tipo_envio === 'delivery' && !empty($direccion_delivery)) {
+        $order->set_shipping_address_1($direccion_delivery);
+    } elseif ($tipo_envio === 'retiro') {
+        $order->set_shipping_address_1('Retiro en tienda');
+    }
+    
+    // Mantener meta data para compatibilidad
+    $order->update_meta_data('_fecha_envio_custom', $fecha_envio);
+    $order->update_meta_data('_custom_shipping_type', $tipo_envio);
     $order->update_meta_data('_custom_shipping_zone', sanitize_text_field($_POST['custom_shipping_zone'] ?? ''));
-    $order->update_meta_data('_direccion_delivery_custom', sanitize_text_field($_POST['direccion_delivery_custom'] ?? ''));
+    $order->update_meta_data('_direccion_delivery_custom', $direccion_delivery);
 }, 10, 2);
