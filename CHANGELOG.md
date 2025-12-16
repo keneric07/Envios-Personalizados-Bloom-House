@@ -1,5 +1,9 @@
 # Changelog - Envío Personalizado con Fee
 
+## 3.0.13 - 16 Dec 2025
+- Agregado calendario datepicker para seleccionar fecha visualmente (además de escritura manual)
+- El datepicker respeta el formato dd/mm/yyyy y la configuración de fecha mínima
+
 ## 3.0.12 - 16 Dec 2025
 - Agregado switch en configuración para permitir o no pedidos del mismo día (sin necesidad de modificar código)
 - Cambiado formato de fecha de mm/dd/yyyy a dd/mm/yyyy (formato más común)

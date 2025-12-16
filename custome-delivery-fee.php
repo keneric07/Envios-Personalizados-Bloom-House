@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Envío Personalizado con Fee (Configurable)
  * Description: Campos de fecha, tipo de envío, zona y dirección en checkout, con configuración de zonas editable desde el admin.
- * Version: 3.0.12
+ * Version: 3.0.13
  * Author: Keneric / ChatGPT
  * Text Domain: envio-fee
  */
@@ -75,10 +75,12 @@ function envio_fee_get_zones() {
     return $zones;
 }
 
-// Enqueue Dashicons for frontend
+// Enqueue Dashicons and jQuery UI Datepicker for frontend
 add_action('wp_enqueue_scripts', function(){
     if (is_checkout()) {
         wp_enqueue_style('dashicons');
+        wp_enqueue_script('jquery-ui-datepicker');
+        wp_enqueue_style('jquery-ui-css', 'https://code.jquery.com/ui/1.13.2/themes/ui-lightness/jquery-ui.css');
     }
 });
 
@@ -366,11 +368,37 @@ add_action('woocommerce_review_order_after_payment', function(){
                 }
             }
             
-            // Manejar input de fecha
+            // Inicializar datepicker
+            var permitirMismoDia = $('#fecha_envio_custom').data('permitir-mismo-dia') == 1;
+            var fechaMinima = $('#fecha_envio_custom').data('min-date');
+            var fechaMinimaDate = new Date(fechaMinima);
+            
+            $('#fecha_envio_custom').datepicker({
+                dateFormat: 'dd/mm/yy',
+                minDate: fechaMinimaDate,
+                changeMonth: true,
+                changeYear: true,
+                onSelect: function(dateText, inst) {
+                    var fechaISO = convertirFechaDDMMYYYY(dateText);
+                    if (fechaISO && validarFecha(dateText, permitirMismoDia)) {
+                        $('#fecha_envio_custom_iso').val(fechaISO);
+                        $(this).removeClass('error');
+                        $(this)[0].setCustomValidity('');
+                        pingTotals();
+                    } else {
+                        $(this).addClass('error');
+                        var mensaje = permitirMismoDia 
+                            ? '<?php _e('La fecha debe ser hoy o una fecha futura', 'envio-fee'); ?>'
+                            : '<?php _e('La fecha debe ser a partir de mañana', 'envio-fee'); ?>';
+                        $(this)[0].setCustomValidity(mensaje);
+                    }
+                }
+            });
+            
+            // Manejar input de fecha manual
             $('#fecha_envio_custom').on('input blur', function(){
                 var $input = $(this);
                 var fechaStr = $input.val().trim();
-                var permitirMismoDia = $input.data('permitir-mismo-dia') == 1;
                 
                 // Formatear automáticamente mientras escribe
                 if (fechaStr.length > 0 && fechaStr.length < 10) {
@@ -391,6 +419,7 @@ add_action('woocommerce_review_order_after_payment', function(){
                     if (fechaISO && validarFecha(fechaStr, permitirMismoDia)) {
                         $('#fecha_envio_custom_iso').val(fechaISO);
                         $input.removeClass('error');
+                        $input[0].setCustomValidity('');
                         pingTotals();
                     } else {
                         $input.addClass('error');
