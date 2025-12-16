@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Envío Personalizado con Fee (Configurable)
  * Description: Campos de fecha, tipo de envío, zona y dirección en checkout, con configuración de zonas editable desde el admin.
- * Version: 3.0.10
+ * Version: 3.0.12
  * Author: Keneric / ChatGPT
  * Text Domain: envio-fee
  */
@@ -112,7 +112,12 @@ function envio_fee_settings_page() {
             }
         }
         update_option('envio_fee_zones', $zones);
-        echo '<div class="updated"><p>'.__('Zonas guardadas correctamente.', 'envio-fee').'</p></div>';
+        
+        // Guardar opción de permitir pedidos del mismo día
+        $permitir_mismo_dia = !empty($_POST['envio_fee_permitir_mismo_dia']) ? 1 : 0;
+        update_option('envio_fee_permitir_mismo_dia', $permitir_mismo_dia);
+        
+        echo '<div class="updated"><p>'.__('Configuración guardada correctamente.', 'envio-fee').'</p></div>';
     }
 
     $zones = envio_fee_get_zones();
@@ -130,9 +135,28 @@ function envio_fee_settings_page() {
         </h2>
         
         <?php if ($active_tab == 'settings'): ?>
-            <h2><?php _e('Configuración de Zonas de Envío', 'envio-fee'); ?></h2>
+            <?php $permitir_mismo_dia = get_option('envio_fee_permitir_mismo_dia', 0); ?>
+            <h2><?php _e('Configuración General', 'envio-fee'); ?></h2>
             <form method="post">
                 <?php wp_nonce_field('envio_fee_save_action', 'envio_fee_nonce'); ?>
+                <table class="form-table">
+                    <tbody>
+                        <tr>
+                            <th scope="row">
+                                <label for="envio_fee_permitir_mismo_dia"><?php _e('Permitir pedidos del mismo día', 'envio-fee'); ?></label>
+                            </th>
+                            <td>
+                                <label>
+                                    <input type="checkbox" name="envio_fee_permitir_mismo_dia" id="envio_fee_permitir_mismo_dia" value="1" <?php checked($permitir_mismo_dia, 1); ?>>
+                                    <?php _e('Permitir que los clientes seleccionen el día actual como fecha de envío', 'envio-fee'); ?>
+                                </label>
+                                <p class="description"><?php _e('Si está desactivado, los clientes solo podrán seleccionar fechas a partir de mañana.', 'envio-fee'); ?></p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h2><?php _e('Configuración de Zonas de Envío', 'envio-fee'); ?></h2>
                 <table class="widefat">
                     <thead>
                         <tr>
@@ -206,7 +230,16 @@ function envio_fee_settings_page() {
 
 // Checkout fields
 add_action('woocommerce_review_order_after_payment', function(){
+    $permitir_mismo_dia = get_option('envio_fee_permitir_mismo_dia', 0);
+    $hoy = date('Y-m-d');
     $manana = date('Y-m-d', strtotime('+1 day'));
+    $fecha_minima = $permitir_mismo_dia ? $hoy : $manana;
+    $fecha_default = $permitir_mismo_dia ? $hoy : $manana;
+    
+    // Formatear fecha default a dd/mm/yyyy
+    $fecha_default_formateada = date('d/m/Y', strtotime($fecha_default));
+    $fecha_minima_formateada = date('d/m/Y', strtotime($fecha_minima));
+    
     $zones = envio_fee_get_zones();
     ?>
     <div id="envio-fee-fields">
@@ -222,6 +255,12 @@ add_action('woocommerce_review_order_after_payment', function(){
                 height: 18px;
                 color: #666;
             }
+            #fecha_envio_custom {
+                max-width: 150px;
+            }
+            #fecha_envio_custom.error {
+                border-color: #dc3232;
+            }
         </style>
         <p class="form-row form-row-wide validate-required">
             <label for="fecha_envio_custom" class="">
@@ -229,7 +268,12 @@ add_action('woocommerce_review_order_after_payment', function(){
                 <?php _e('Fecha de envío', 'envio-fee'); ?>
                 <abbr class="required" title="required">*</abbr>
             </label>
-            <input type="date" id="fecha_envio_custom" name="fecha_envio_custom" class="input-text update_totals_on_change" min="<?php echo esc_attr($manana); ?>" required aria-required="true">
+            <input type="text" id="fecha_envio_custom" name="fecha_envio_custom" class="input-text update_totals_on_change" 
+                   placeholder="dd/mm/yyyy" value="<?php echo esc_attr($fecha_default_formateada); ?>" 
+                   pattern="\d{2}/\d{2}/\d{4}" required aria-required="true" 
+                   data-min-date="<?php echo esc_attr($fecha_minima); ?>" 
+                   data-permitir-mismo-dia="<?php echo esc_attr($permitir_mismo_dia); ?>">
+            <input type="hidden" id="fecha_envio_custom_iso" name="fecha_envio_custom_iso" value="<?php echo esc_attr($fecha_default); ?>">
         </p>
         <p class="form-row form-row-wide validate-required">
             <label for="horario_envio_custom" class="">
@@ -278,6 +322,94 @@ add_action('woocommerce_review_order_after_payment', function(){
         </p>
         <script>
         (function($){
+            // Función para convertir dd/mm/yyyy a yyyy-mm-dd
+            function convertirFechaDDMMYYYY(fechaStr) {
+                var partes = fechaStr.split('/');
+                if (partes.length !== 3) return null;
+                var dia = parseInt(partes[0], 10);
+                var mes = parseInt(partes[1], 10);
+                var ano = parseInt(partes[2], 10);
+                
+                // Validar que sean números válidos
+                if (isNaN(dia) || isNaN(mes) || isNaN(ano)) return null;
+                if (dia < 1 || dia > 31 || mes < 1 || mes > 12 || ano < 2000) return null;
+                
+                // Crear fecha y validar
+                var fecha = new Date(ano, mes - 1, dia);
+                if (fecha.getDate() !== dia || fecha.getMonth() !== (mes - 1) || fecha.getFullYear() !== ano) {
+                    return null; // Fecha inválida
+                }
+                
+                // Formatear a yyyy-mm-dd
+                var yyyy = fecha.getFullYear();
+                var mm = String(fecha.getMonth() + 1).padStart(2, '0');
+                var dd = String(fecha.getDate()).padStart(2, '0');
+                return yyyy + '-' + mm + '-' + dd;
+            }
+            
+            // Función para validar fecha
+            function validarFecha(fechaStr, permitirMismoDia) {
+                var fechaISO = convertirFechaDDMMYYYY(fechaStr);
+                if (!fechaISO) return false;
+                
+                var hoy = new Date();
+                hoy.setHours(0, 0, 0, 0);
+                var fechaSeleccionada = new Date(fechaISO);
+                fechaSeleccionada.setHours(0, 0, 0, 0);
+                
+                if (permitirMismoDia) {
+                    return fechaSeleccionada >= hoy;
+                } else {
+                    var manana = new Date(hoy);
+                    manana.setDate(manana.getDate() + 1);
+                    return fechaSeleccionada >= manana;
+                }
+            }
+            
+            // Manejar input de fecha
+            $('#fecha_envio_custom').on('input blur', function(){
+                var $input = $(this);
+                var fechaStr = $input.val().trim();
+                var permitirMismoDia = $input.data('permitir-mismo-dia') == 1;
+                
+                // Formatear automáticamente mientras escribe
+                if (fechaStr.length > 0 && fechaStr.length < 10) {
+                    // Remover caracteres no numéricos excepto /
+                    fechaStr = fechaStr.replace(/[^\d/]/g, '');
+                    // Agregar / automáticamente
+                    if (fechaStr.length === 2 && !fechaStr.includes('/')) {
+                        fechaStr = fechaStr + '/';
+                    } else if (fechaStr.length === 5 && fechaStr.split('/').length === 2) {
+                        fechaStr = fechaStr + '/';
+                    }
+                    $input.val(fechaStr);
+                }
+                
+                // Validar cuando tiene formato completo
+                if (fechaStr.length === 10) {
+                    var fechaISO = convertirFechaDDMMYYYY(fechaStr);
+                    if (fechaISO && validarFecha(fechaStr, permitirMismoDia)) {
+                        $('#fecha_envio_custom_iso').val(fechaISO);
+                        $input.removeClass('error');
+                        pingTotals();
+                    } else {
+                        $input.addClass('error');
+                        if (!fechaISO) {
+                            $input[0].setCustomValidity('<?php _e('Formato de fecha inválido. Use dd/mm/yyyy', 'envio-fee'); ?>');
+                        } else {
+                            var mensaje = permitirMismoDia 
+                                ? '<?php _e('La fecha debe ser hoy o una fecha futura', 'envio-fee'); ?>'
+                                : '<?php _e('La fecha debe ser a partir de mañana', 'envio-fee'); ?>';
+                            $input[0].setCustomValidity(mensaje);
+                        }
+                    }
+                } else if (fechaStr.length > 0) {
+                    $input[0].setCustomValidity('<?php _e('Formato incompleto. Use dd/mm/yyyy', 'envio-fee'); ?>');
+                } else {
+                    $input[0].setCustomValidity('');
+                }
+            });
+            
             function toggleDeliveryFields(){
                 if($('#custom_shipping_type').val()=='delivery'){
                     $('.delivery-only').show();
@@ -302,6 +434,8 @@ add_action('woocommerce_review_order_after_payment', function(){
             });
             $(document).ready(function(){
                 toggleDeliveryFields();
+                // Validar fecha inicial
+                $('#fecha_envio_custom').trigger('blur');
                 // primer recálculo al cargar
                 pingTotals();
             });
@@ -334,15 +468,46 @@ function envio_fee_validate_checkout_fields() {
     }
 
     // Validar fecha de envío (obligatoria siempre)
-    if (empty($_POST['fecha_envio_custom'])) {
+    $fecha_iso = !empty($_POST['fecha_envio_custom_iso']) ? sanitize_text_field($_POST['fecha_envio_custom_iso']) : '';
+    $fecha_input = !empty($_POST['fecha_envio_custom']) ? sanitize_text_field($_POST['fecha_envio_custom']) : '';
+    
+    if (empty($fecha_iso) && empty($fecha_input)) {
         wc_add_notice(__('Por favor selecciona la fecha de envío.', 'envio-fee'), 'error');
     } else {
-        // Validar que la fecha sea válida y no sea el día actual ni anterior
-        $fecha = sanitize_text_field($_POST['fecha_envio_custom']);
-        $hoy   = date('Y-m-d');
+        // Usar fecha ISO si está disponible, sino convertir desde dd/mm/yyyy
+        if (!empty($fecha_iso)) {
+            $fecha = $fecha_iso;
+        } else {
+            // Convertir dd/mm/yyyy a yyyy-mm-dd
+            $partes = explode('/', $fecha_input);
+            if (count($partes) === 3) {
+                $fecha = sprintf('%04d-%02d-%02d', $partes[2], $partes[1], $partes[0]);
+            } else {
+                wc_add_notice(__('Formato de fecha inválido. Use dd/mm/yyyy', 'envio-fee'), 'error');
+                return;
+            }
+        }
+        
+        // Validar formato de fecha
+        $timestamp = strtotime($fecha);
+        if ($timestamp === false) {
+            wc_add_notice(__('Fecha de envío inválida.', 'envio-fee'), 'error');
+            return;
+        }
+        
+        // Validar según configuración
+        $permitir_mismo_dia = get_option('envio_fee_permitir_mismo_dia', 0);
+        $hoy = date('Y-m-d');
         $manana = date('Y-m-d', strtotime('+1 day'));
-        if ($fecha <= $hoy) {
-            wc_add_notice(__('La fecha de envío debe ser a partir de mañana. No se puede seleccionar el día actual.', 'envio-fee'), 'error');
+        
+        if ($permitir_mismo_dia) {
+            if ($fecha < $hoy) {
+                wc_add_notice(__('La fecha de envío no puede ser anterior a hoy.', 'envio-fee'), 'error');
+            }
+        } else {
+            if ($fecha <= $hoy) {
+                wc_add_notice(__('La fecha de envío debe ser a partir de mañana. No se puede seleccionar el día actual.', 'envio-fee'), 'error');
+            }
         }
     }
 
@@ -444,7 +609,20 @@ function envio_fee_format_date_spanish($date) {
 add_action('woocommerce_checkout_create_order', function($order, $data){
     // Obtener datos del formulario
     $tipo_envio = sanitize_text_field($_POST['custom_shipping_type'] ?? '');
-    $fecha_envio = sanitize_text_field($_POST['fecha_envio_custom'] ?? '');
+    // Usar fecha ISO si está disponible, sino convertir desde dd/mm/yyyy
+    if (!empty($_POST['fecha_envio_custom_iso'])) {
+        $fecha_envio = sanitize_text_field($_POST['fecha_envio_custom_iso']);
+    } elseif (!empty($_POST['fecha_envio_custom'])) {
+        $fecha_input = sanitize_text_field($_POST['fecha_envio_custom']);
+        $partes = explode('/', $fecha_input);
+        if (count($partes) === 3) {
+            $fecha_envio = sprintf('%04d-%02d-%02d', $partes[2], $partes[1], $partes[0]);
+        } else {
+            $fecha_envio = '';
+        }
+    } else {
+        $fecha_envio = '';
+    }
     $horario_envio = sanitize_text_field($_POST['horario_envio_custom'] ?? '');
     $direccion_delivery = sanitize_text_field($_POST['direccion_delivery_custom'] ?? '');
     

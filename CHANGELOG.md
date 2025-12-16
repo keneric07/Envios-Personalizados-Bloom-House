@@ -1,5 +1,13 @@
 # Changelog - Envío Personalizado con Fee
 
+## 3.0.12 - 16 Dec 2025
+- Agregado switch en configuración para permitir o no pedidos del mismo día (sin necesidad de modificar código)
+- Cambiado formato de fecha de mm/dd/yyyy a dd/mm/yyyy (formato más común)
+- Mejorada validación de fecha con formato automático mientras el usuario escribe
+
+## 3.0.11 - 16 Dec 2025
+- El campo de fecha de envío ahora se autoselecciona con el día de mañana por defecto
+
 ## 3.0.10 - 16 Dec 2025
 - Agregados enlaces directos en el listado de plugins para acceder a Configuración y Changelog
 
