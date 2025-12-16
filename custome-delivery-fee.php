@@ -2,12 +2,20 @@
 /**
  * Plugin Name: Envío Personalizado con Fee (Configurable)
  * Description: Campos de fecha, tipo de envío, zona y dirección en checkout, con configuración de zonas editable desde el admin.
- * Version: 3.0.8
+ * Version: 3.0.10
  * Author: Keneric / ChatGPT
  * Text Domain: envio-fee
  */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
+
+// Agregar enlaces de acción en el listado de plugins
+add_filter('plugin_action_links_' . plugin_basename(__FILE__), function($links) {
+    $settings_link = '<a href="' . admin_url('admin.php?page=envio-fee-settings&tab=settings') . '">' . __('Configuración', 'envio-fee') . '</a>';
+    $changelog_link = '<a href="' . admin_url('admin.php?page=envio-fee-settings&tab=changelog') . '">' . __('Changelog', 'envio-fee') . '</a>';
+    array_unshift($links, $changelog_link, $settings_link);
+    return $links;
+});
 
 // Default zones
 function envio_fee_default_zones() {
@@ -198,7 +206,7 @@ function envio_fee_settings_page() {
 
 // Checkout fields
 add_action('woocommerce_review_order_after_payment', function(){
-    $hoy = date('Y-m-d');
+    $manana = date('Y-m-d', strtotime('+1 day'));
     $zones = envio_fee_get_zones();
     ?>
     <div id="envio-fee-fields">
@@ -221,7 +229,7 @@ add_action('woocommerce_review_order_after_payment', function(){
                 <?php _e('Fecha de envío', 'envio-fee'); ?>
                 <abbr class="required" title="required">*</abbr>
             </label>
-            <input type="date" id="fecha_envio_custom" name="fecha_envio_custom" class="input-text update_totals_on_change" min="<?php echo esc_attr($hoy); ?>" required aria-required="true">
+            <input type="date" id="fecha_envio_custom" name="fecha_envio_custom" class="input-text update_totals_on_change" min="<?php echo esc_attr($manana); ?>" required aria-required="true">
         </p>
         <p class="form-row form-row-wide validate-required">
             <label for="horario_envio_custom" class="">
@@ -329,11 +337,12 @@ function envio_fee_validate_checkout_fields() {
     if (empty($_POST['fecha_envio_custom'])) {
         wc_add_notice(__('Por favor selecciona la fecha de envío.', 'envio-fee'), 'error');
     } else {
-        // Validar que la fecha sea válida y no sea anterior a hoy
+        // Validar que la fecha sea válida y no sea el día actual ni anterior
         $fecha = sanitize_text_field($_POST['fecha_envio_custom']);
         $hoy   = date('Y-m-d');
-        if ($fecha < $hoy) {
-            wc_add_notice(__('La fecha de envío no puede ser anterior a hoy.', 'envio-fee'), 'error');
+        $manana = date('Y-m-d', strtotime('+1 day'));
+        if ($fecha <= $hoy) {
+            wc_add_notice(__('La fecha de envío debe ser a partir de mañana. No se puede seleccionar el día actual.', 'envio-fee'), 'error');
         }
     }
 

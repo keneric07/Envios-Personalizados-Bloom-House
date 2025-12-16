@@ -1,5 +1,11 @@
 # Changelog - Envío Personalizado con Fee
 
+## 3.0.10 - 16 Dec 2025
+- Agregados enlaces directos en el listado de plugins para acceder a Configuración y Changelog
+
+## 3.0.9 - 16 Dec 2025
+- Ahora la fecha de envío no puede ser el día actual; solo se permiten fechas a partir de mañana.
+
 ## 3.0.8 - 16 Dec 2025
 - Agregado campo obligatorio "Horario de envío o retiro" con opciones 9am-12pm y 1pm-4pm
 - Mejorada validación de campos obligatorios en checkout (fecha, tipo, zona, dirección, horario)
@@ -41,4 +47,5 @@
 - Versión inicial del plugin
 - Sistema básico de zonas de envío predefinidas (7 zonas)
 - Integración con WooCommerce checkout
+
 
