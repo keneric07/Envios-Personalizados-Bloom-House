@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Envío Personalizado con Fee (Configurable)
  * Description: Campos de fecha, tipo de envío, zona y dirección en checkout, con configuración de zonas editable desde el admin.
- * Version: 3.0.13
+ * Version: 3.0.14
  * Author: Keneric / ChatGPT
  * Text Domain: envio-fee
  */
@@ -80,7 +80,7 @@ add_action('wp_enqueue_scripts', function(){
     if (is_checkout()) {
         wp_enqueue_style('dashicons');
         wp_enqueue_script('jquery-ui-datepicker');
-        wp_enqueue_style('jquery-ui-css', 'https://code.jquery.com/ui/1.13.2/themes/ui-lightness/jquery-ui.css');
+        wp_enqueue_style('jquery-ui-datepicker', 'https://code.jquery.com/ui/1.13.2/themes/ui-lightness/jquery-ui.css', array(), '1.13.2');
     }
 });
 
@@ -259,9 +259,13 @@ add_action('woocommerce_review_order_after_payment', function(){
             }
             #fecha_envio_custom {
                 max-width: 150px;
+                cursor: pointer;
             }
             #fecha_envio_custom.error {
                 border-color: #dc3232;
+            }
+            .ui-datepicker {
+                z-index: 9999 !important;
             }
         </style>
         <p class="form-row form-row-wide validate-required">
@@ -368,32 +372,67 @@ add_action('woocommerce_review_order_after_payment', function(){
                 }
             }
             
-            // Inicializar datepicker
+            // Variable global para permitir mismo día
             var permitirMismoDia = $('#fecha_envio_custom').data('permitir-mismo-dia') == 1;
-            var fechaMinima = $('#fecha_envio_custom').data('min-date');
-            var fechaMinimaDate = new Date(fechaMinima);
             
-            $('#fecha_envio_custom').datepicker({
-                dateFormat: 'dd/mm/yy',
-                minDate: fechaMinimaDate,
-                changeMonth: true,
-                changeYear: true,
-                onSelect: function(dateText, inst) {
-                    var fechaISO = convertirFechaDDMMYYYY(dateText);
-                    if (fechaISO && validarFecha(dateText, permitirMismoDia)) {
-                        $('#fecha_envio_custom_iso').val(fechaISO);
-                        $(this).removeClass('error');
-                        $(this)[0].setCustomValidity('');
-                        pingTotals();
-                    } else {
-                        $(this).addClass('error');
-                        var mensaje = permitirMismoDia 
-                            ? '<?php _e('La fecha debe ser hoy o una fecha futura', 'envio-fee'); ?>'
-                            : '<?php _e('La fecha debe ser a partir de mañana', 'envio-fee'); ?>';
-                        $(this)[0].setCustomValidity(mensaje);
-                    }
+            // Función para inicializar datepicker
+            function inicializarDatepicker() {
+                var $fechaInput = $('#fecha_envio_custom');
+                if ($fechaInput.length === 0) {
+                    return;
                 }
-            });
+                
+                // Verificar que jQuery UI datepicker esté disponible
+                if (typeof $.fn.datepicker === 'undefined') {
+                    console.log('jQuery UI Datepicker no está disponible, reintentando...');
+                    // Reintentar después de un breve delay
+                    setTimeout(inicializarDatepicker, 500);
+                    return;
+                }
+                
+                // Si ya está inicializado, no hacer nada
+                if ($fechaInput.hasClass('hasDatepicker')) {
+                    return;
+                }
+                
+                var fechaMinima = $fechaInput.data('min-date');
+                
+                if (!fechaMinima) {
+                    console.log('Fecha mínima no encontrada');
+                    return;
+                }
+                
+                // Convertir fecha mínima a objeto Date
+                var fechaMinimaParts = fechaMinima.split('-');
+                var fechaMinimaDate = new Date(parseInt(fechaMinimaParts[0]), parseInt(fechaMinimaParts[1]) - 1, parseInt(fechaMinimaParts[2]));
+                
+                // Actualizar variable permitirMismoDia
+                permitirMismoDia = $fechaInput.data('permitir-mismo-dia') == 1;
+                
+                // Inicializar datepicker
+                $fechaInput.datepicker({
+                    dateFormat: 'dd/mm/yy',
+                    minDate: fechaMinimaDate,
+                    changeMonth: true,
+                    changeYear: true,
+                    showButtonPanel: true,
+                    onSelect: function(dateText, inst) {
+                        var fechaISO = convertirFechaDDMMYYYY(dateText);
+                        if (fechaISO && validarFecha(dateText, permitirMismoDia)) {
+                            $('#fecha_envio_custom_iso').val(fechaISO);
+                            $(this).removeClass('error');
+                            $(this)[0].setCustomValidity('');
+                            pingTotals();
+                        } else {
+                            $(this).addClass('error');
+                            var mensaje = permitirMismoDia 
+                                ? '<?php _e('La fecha debe ser hoy o una fecha futura', 'envio-fee'); ?>'
+                                : '<?php _e('La fecha debe ser a partir de mañana', 'envio-fee'); ?>';
+                            $(this)[0].setCustomValidity(mensaje);
+                        }
+                    }
+                });
+            }
             
             // Manejar input de fecha manual
             $('#fecha_envio_custom').on('input blur', function(){
@@ -463,10 +502,23 @@ add_action('woocommerce_review_order_after_payment', function(){
             });
             $(document).ready(function(){
                 toggleDeliveryFields();
+                
+                // Inicializar datepicker después de que todo esté listo
+                inicializarDatepicker();
+                
                 // Validar fecha inicial
                 $('#fecha_envio_custom').trigger('blur');
                 // primer recálculo al cargar
                 pingTotals();
+            });
+            
+            // También intentar inicializar cuando se actualiza el checkout (por si se carga dinámicamente)
+            $(document.body).on('updated_checkout', function(){
+                setTimeout(function(){
+                    if ($('#fecha_envio_custom').length > 0 && !$('#fecha_envio_custom').hasClass('hasDatepicker')) {
+                        inicializarDatepicker();
+                    }
+                }, 100);
             });
         })(jQuery);
         </script>

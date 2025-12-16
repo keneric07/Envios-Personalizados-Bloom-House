@@ -1,5 +1,10 @@
 # Changelog - Envío Personalizado con Fee
 
+## 3.0.14 - 16 Dec 2025
+- Corregida inicialización del datepicker para que se abra correctamente al hacer clic en el campo de fecha
+- Mejorada compatibilidad del datepicker con actualizaciones dinámicas del checkout
+- Agregada verificación de disponibilidad de jQuery UI antes de inicializar el datepicker
+
 ## 3.0.13 - 16 Dec 2025
 - Agregado calendario datepicker para seleccionar fecha visualmente (además de escritura manual)
 - El datepicker respeta el formato dd/mm/yyyy y la configuración de fecha mínima
