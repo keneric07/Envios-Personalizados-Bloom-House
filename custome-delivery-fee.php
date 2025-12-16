@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Envío Personalizado con Fee (Configurable)
  * Description: Campos de fecha, tipo de envío, zona y dirección en checkout, con configuración de zonas editable desde el admin.
- * Version: 3.0.7
+ * Version: 3.0.8
  * Author: Keneric / ChatGPT
  * Text Domain: envio-fee
  */
@@ -86,8 +86,10 @@ add_action('admin_menu', function() {
     );
 });
 
-// Admin page HTML
+// Admin page HTML con pestañas y changelog externo
 function envio_fee_settings_page() {
+    $active_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'settings';
+
     if ( isset($_POST['envio_fee_save']) && check_admin_referer('envio_fee_save_action', 'envio_fee_nonce') ) {
         $zones = array();
         if (!empty($_POST['nombre'])) {
@@ -108,53 +110,89 @@ function envio_fee_settings_page() {
     $zones = envio_fee_get_zones();
     ?>
     <div class="wrap">
-        <h1><?php _e('Configuración de Zonas de Envío', 'envio-fee'); ?></h1>
-        <form method="post">
-            <?php wp_nonce_field('envio_fee_save_action', 'envio_fee_nonce'); ?>
-            <table class="widefat">
-                <thead>
-                    <tr>
-                        <th><?php _e('Activo', 'envio-fee'); ?></th>
-                        <th><?php _e('Nombre', 'envio-fee'); ?></th>
-                        <th><?php _e('Precio', 'envio-fee'); ?></th>
-                        <th><?php _e('Descripción', 'envio-fee'); ?></th>
-                        <th><?php _e('Eliminar', 'envio-fee'); ?></th>
-                    </tr>
-                </thead>
-                <tbody id="envio-fee-rows">
-                    <?php $i=0; foreach ($zones as $zone): ?>
+        <h1><?php _e('Envío Personalizado', 'envio-fee'); ?></h1>
+        
+        <h2 class="nav-tab-wrapper">
+            <a href="?page=envio-fee-settings&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">
+                <?php _e('Configuración', 'envio-fee'); ?>
+            </a>
+            <a href="?page=envio-fee-settings&tab=changelog" class="nav-tab <?php echo $active_tab == 'changelog' ? 'nav-tab-active' : ''; ?>">
+                <?php _e('Changelog', 'envio-fee'); ?>
+            </a>
+        </h2>
+        
+        <?php if ($active_tab == 'settings'): ?>
+            <h2><?php _e('Configuración de Zonas de Envío', 'envio-fee'); ?></h2>
+            <form method="post">
+                <?php wp_nonce_field('envio_fee_save_action', 'envio_fee_nonce'); ?>
+                <table class="widefat">
+                    <thead>
                         <tr>
-                            <td><input type="checkbox" name="activo[<?php echo $i; ?>]" <?php checked($zone['activo']); ?>></td>
-                            <td><input type="text" name="nombre[<?php echo $i; ?>]" value="<?php echo esc_attr($zone['nombre']); ?>"></td>
-                            <td><input type="number" step="0.01" name="precio[<?php echo $i; ?>]" value="<?php echo esc_attr($zone['precio']); ?>"></td>
-                            <td><textarea name="descripcion[<?php echo $i; ?>]"><?php echo esc_textarea($zone['descripcion']); ?></textarea></td>
-                            <td><button type="button" class="button remove-row">X</button></td>
+                            <th><?php _e('Activo', 'envio-fee'); ?></th>
+                            <th><?php _e('Nombre', 'envio-fee'); ?></th>
+                            <th><?php _e('Precio', 'envio-fee'); ?></th>
+                            <th><?php _e('Descripción', 'envio-fee'); ?></th>
+                            <th><?php _e('Eliminar', 'envio-fee'); ?></th>
                         </tr>
-                    <?php $i++; endforeach; ?>
-                </tbody>
-            </table>
-            <p><button type="button" class="button" id="add-zone"><?php _e('Agregar Zona', 'envio-fee'); ?></button></p>
-            <p><input type="submit" name="envio_fee_save" class="button-primary" value="<?php _e('Guardar Cambios', 'envio-fee'); ?>"></p>
-        </form>
+                    </thead>
+                    <tbody id="envio-fee-rows">
+                        <?php $i=0; foreach ($zones as $zone): ?>
+                            <tr>
+                                <td><input type="checkbox" name="activo[<?php echo $i; ?>]" <?php checked($zone['activo']); ?>></td>
+                                <td><input type="text" name="nombre[<?php echo $i; ?>]" value="<?php echo esc_attr($zone['nombre']); ?>"></td>
+                                <td><input type="number" step="0.01" name="precio[<?php echo $i; ?>]" value="<?php echo esc_attr($zone['precio']); ?>"></td>
+                                <td><textarea name="descripcion[<?php echo $i; ?>]"><?php echo esc_textarea($zone['descripcion']); ?></textarea></td>
+                                <td><button type="button" class="button remove-row">X</button></td>
+                            </tr>
+                        <?php $i++; endforeach; ?>
+                    </tbody>
+                </table>
+                <p><button type="button" class="button" id="add-zone"><?php _e('Agregar Zona', 'envio-fee'); ?></button></p>
+                <p><input type="submit" name="envio_fee_save" class="button-primary" value="<?php _e('Guardar Cambios', 'envio-fee'); ?>"></p>
+            </form>
+            <script>
+            document.getElementById('add-zone').addEventListener('click', function(){
+                var tbody = document.getElementById('envio-fee-rows');
+                var index = tbody.rows.length;
+                var row = document.createElement('tr');
+                row.innerHTML = '<td><input type="checkbox" name="activo['+index+']"></td>'+
+                                '<td><input type="text" name="nombre['+index+']"></td>'+
+                                '<td><input type="number" step="0.01" name="precio['+index+']"></td>'+
+                                '<td><textarea name="descripcion['+index+']"></textarea></td>'+
+                                '<td><button type="button" class="button remove-row">X</button></td>';
+                tbody.appendChild(row);
+            });
+            document.addEventListener('click', function(e){
+                if (e.target && e.target.classList.contains('remove-row')){
+                    e.target.closest('tr').remove();
+                }
+            });
+            </script>
+        <?php else: ?>
+            <?php
+            // Leer el archivo CHANGELOG.md
+            $changelog_path = plugin_dir_path(__FILE__) . 'CHANGELOG.md';
+            $changelog = '';
+            if (file_exists($changelog_path)) {
+                $changelog = file_get_contents($changelog_path);
+                // Convertir markdown básico a HTML
+                $changelog = nl2br(esc_html($changelog));
+            }
+            ?>
+            <div class="changelog-container" style="max-width: 900px; margin-top: 20px;">
+                <h2><?php _e('Historial de Cambios', 'envio-fee'); ?></h2>
+                <div style="background: #fff; padding: 20px; border: 1px solid #ccd0d4; box-shadow: 0 1px 1px rgba(0,0,0,.04); line-height: 1.6;">
+                    <?php if ($changelog): ?>
+                        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;">
+                            <?php echo $changelog; ?>
+                        </div>
+                    <?php else: ?>
+                        <p><?php _e('No se encontró el archivo CHANGELOG.md en la carpeta del plugin.', 'envio-fee'); ?></p>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
-    <script>
-    document.getElementById('add-zone').addEventListener('click', function(){
-        var tbody = document.getElementById('envio-fee-rows');
-        var index = tbody.rows.length;
-        var row = document.createElement('tr');
-        row.innerHTML = '<td><input type="checkbox" name="activo['+index+']"></td>'+
-                        '<td><input type="text" name="nombre['+index+']"></td>'+
-                        '<td><input type="number" step="0.01" name="precio['+index+']"></td>'+
-                        '<td><textarea name="descripcion['+index+']"></textarea></td>'+
-                        '<td><button type="button" class="button remove-row">X</button></td>';
-        tbody.appendChild(row);
-    });
-    document.addEventListener('click', function(e){
-        if (e.target && e.target.classList.contains('remove-row')){
-            e.target.closest('tr').remove();
-        }
-    });
-    </script>
     <?php
 }
 
@@ -184,6 +222,18 @@ add_action('woocommerce_review_order_after_payment', function(){
                 <abbr class="required" title="required">*</abbr>
             </label>
             <input type="date" id="fecha_envio_custom" name="fecha_envio_custom" class="input-text update_totals_on_change" min="<?php echo esc_attr($hoy); ?>" required aria-required="true">
+        </p>
+        <p class="form-row form-row-wide validate-required">
+            <label for="horario_envio_custom" class="">
+                <span class="dashicons dashicons-clock"></span>
+                <?php _e('Horario de envío o retiro', 'envio-fee'); ?>
+                <abbr class="required" title="required">*</abbr>
+            </label>
+            <select id="horario_envio_custom" name="horario_envio_custom" class="select update_totals_on_change" required aria-required="true">
+                <option value=""><?php _e('Selecciona un horario…', 'envio-fee'); ?></option>
+                <option value="9am - 12 pm"><?php _e('9am - 12 pm', 'envio-fee'); ?></option>
+                <option value="1pm - 4 pm"><?php _e('1pm - 4 pm', 'envio-fee'); ?></option>
+            </select>
         </p>
         <p class="form-row form-row-wide">
             <label for="custom_shipping_type">
@@ -238,7 +288,7 @@ add_action('woocommerce_review_order_after_payment', function(){
                     $(document.body).trigger('update_checkout');
                 }, 150);
             }
-            $(document).on('change input', '#custom_shipping_type, #custom_shipping_zone, #direccion_delivery_custom, #fecha_envio_custom', function(){
+            $(document).on('change input', '#custom_shipping_type, #custom_shipping_zone, #direccion_delivery_custom, #fecha_envio_custom, #horario_envio_custom', function(){
                 toggleDeliveryFields();
                 pingTotals();
             });
@@ -266,22 +316,32 @@ add_action('woocommerce_checkout_update_order_review', function($post_data){
     }
 }, 10, 1);
 
-// Validation
-add_action('woocommerce_checkout_process', function(){
+// Validation (función reutilizable por distintos hooks)
+function envio_fee_validate_checkout_fields() {
     $tipo = sanitize_text_field($_POST['custom_shipping_type'] ?? '');
-    
+
+    // Validar tipo de envío (obligatorio siempre)
+    if (empty($tipo)) {
+        wc_add_notice(__('Por favor selecciona el tipo de envío.', 'envio-fee'), 'error');
+    }
+
     // Validar fecha de envío (obligatoria siempre)
     if (empty($_POST['fecha_envio_custom'])) {
         wc_add_notice(__('Por favor selecciona la fecha de envío.', 'envio-fee'), 'error');
     } else {
         // Validar que la fecha sea válida y no sea anterior a hoy
         $fecha = sanitize_text_field($_POST['fecha_envio_custom']);
-        $hoy = date('Y-m-d');
+        $hoy   = date('Y-m-d');
         if ($fecha < $hoy) {
             wc_add_notice(__('La fecha de envío no puede ser anterior a hoy.', 'envio-fee'), 'error');
         }
     }
-    
+
+    // Validar horario de envío o retiro (obligatorio siempre)
+    if (empty($_POST['horario_envio_custom'])) {
+        wc_add_notice(__('Por favor selecciona el horario de envío o retiro.', 'envio-fee'), 'error');
+    }
+
     // Validar campos obligatorios cuando es delivery
     if ($tipo === 'delivery') {
         if (empty($_POST['custom_shipping_zone'])) {
@@ -291,7 +351,16 @@ add_action('woocommerce_checkout_process', function(){
             wc_add_notice(__('Indica la dirección de entrega.', 'envio-fee'), 'error');
         }
     }
-});
+}
+
+// Ejecutar validación en los puntos estándar del checkout
+add_action('woocommerce_checkout_process', 'envio_fee_validate_checkout_fields', 10);
+add_action('woocommerce_after_checkout_validation', function( $data, $errors ) {
+    // Solo añadir errores si aún no existen errores fatales previos
+    if ( is_object( $errors ) && count( $errors->get_error_messages() ) === 0 ) {
+        envio_fee_validate_checkout_fields();
+    }
+}, 10, 2);
 
 // Calculate fees (robust, single-pass)
 add_action('woocommerce_cart_calculate_fees', function($cart){
@@ -367,6 +436,7 @@ add_action('woocommerce_checkout_create_order', function($order, $data){
     // Obtener datos del formulario
     $tipo_envio = sanitize_text_field($_POST['custom_shipping_type'] ?? '');
     $fecha_envio = sanitize_text_field($_POST['fecha_envio_custom'] ?? '');
+    $horario_envio = sanitize_text_field($_POST['horario_envio_custom'] ?? '');
     $direccion_delivery = sanitize_text_field($_POST['direccion_delivery_custom'] ?? '');
     
     // Copiar direcciones de facturación a envío
@@ -386,15 +456,25 @@ add_action('woocommerce_checkout_create_order', function($order, $data){
     // Formatear fecha en español
     $fecha_formateada = envio_fee_format_date_spanish($fecha_envio);
     
-    // Agregar fecha formateada a dirección 2 (combinar con dirección 2 de facturación si existe)
+    // Construir texto con fecha y horario
+    $partes_direccion_2 = array();
     if (!empty($fecha_formateada)) {
+        $partes_direccion_2[] = $fecha_formateada;
+    }
+    if (!empty($horario_envio)) {
+        $partes_direccion_2[] = sprintf(__('Horario: %s', 'envio-fee'), $horario_envio);
+    }
+    $texto_fecha_horario = implode(' | ', $partes_direccion_2);
+    
+    // Agregar fecha y horario a dirección 2 (combinar con dirección 2 de facturación si existe)
+    if (!empty($texto_fecha_horario)) {
         $direccion_2_actual = $order->get_shipping_address_2();
         if (!empty($direccion_2_actual)) {
-            // Si ya hay dirección 2, combinar con fecha
-            $order->set_shipping_address_2($direccion_2_actual . ' | ' . $fecha_formateada);
+            // Si ya hay dirección 2, combinar con fecha y horario
+            $order->set_shipping_address_2($direccion_2_actual . ' | ' . $texto_fecha_horario);
         } else {
-            // Si no hay dirección 2, solo poner la fecha
-            $order->set_shipping_address_2($fecha_formateada);
+            // Si no hay dirección 2, solo poner fecha y horario
+            $order->set_shipping_address_2($texto_fecha_horario);
         }
     }
     
@@ -407,6 +487,7 @@ add_action('woocommerce_checkout_create_order', function($order, $data){
     
     // Mantener meta data para compatibilidad
     $order->update_meta_data('_fecha_envio_custom', $fecha_envio);
+    $order->update_meta_data('_horario_envio_custom', $horario_envio);
     $order->update_meta_data('_custom_shipping_type', $tipo_envio);
     $order->update_meta_data('_custom_shipping_zone', sanitize_text_field($_POST['custom_shipping_zone'] ?? ''));
     $order->update_meta_data('_direccion_delivery_custom', $direccion_delivery);
