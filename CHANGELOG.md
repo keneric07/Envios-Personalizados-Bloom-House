@@ -1,5 +1,8 @@
 # Changelog - Envío Personalizado con Fee
 
+## 3.0.15 - 16 Dec 2025
+- Actualizado nombre del plugin a "Delivery Express - Envíos Programados y Personalizados" con descripción comercial mejorada
+
 ## 3.0.14 - 16 Dec 2025
 - Corregida inicialización del datepicker para que se abra correctamente al hacer clic en el campo de fecha
 - Mejorada compatibilidad del datepicker con actualizaciones dinámicas del checkout

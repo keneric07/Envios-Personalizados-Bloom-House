@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: Envío Personalizado con Fee (Configurable)
- * Description: Campos de fecha, tipo de envío, zona y dirección en checkout, con configuración de zonas editable desde el admin.
- * Version: 3.0.14
+ * Plugin Name: Delivery Express - Envíos Programados y Personalizados
+ * Description: Permite a tus clientes elegir fecha y horario de entrega, configurar zonas de envío con precios personalizados, y gestionar retiros en tienda. Mejora la experiencia de compra con entregas a medida.
+ * Version: 3.0.15
  * Author: Keneric / ChatGPT
  * Text Domain: envio-fee
  */
