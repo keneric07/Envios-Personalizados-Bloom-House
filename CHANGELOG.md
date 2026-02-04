@@ -1,5 +1,9 @@
 # Changelog - Envío Personalizado con Fee
 
+## 3.0.16 - 4 Feb 2025
+- Sincronizada dirección de facturación con dirección de envío (dirección 1 y 2)
+- Fecha y horario de envío ahora también se guardan en dirección 2 de facturación
+
 ## 3.0.15 - 16 Dec 2025
 - Actualizado nombre del plugin a "Delivery Express - Envíos Programados y Personalizados" con descripción comercial mejorada
 
