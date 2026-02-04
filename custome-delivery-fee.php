@@ -753,6 +753,10 @@ add_action('woocommerce_checkout_create_order', function($order, $data){
         $order->set_shipping_address_1('Retiro en tienda');
     }
     
+    // Sincronizar facturación con envío (dirección oculta en checkout)
+    $order->set_billing_address_1($order->get_shipping_address_1());
+    $order->set_billing_address_2($order->get_shipping_address_2());
+    
     // Mantener meta data para compatibilidad
     $order->update_meta_data('_fecha_envio_custom', $fecha_envio);
     $order->update_meta_data('_horario_envio_custom', $horario_envio);
