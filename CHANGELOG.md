@@ -1,5 +1,12 @@
 # Changelog - Envío Personalizado con Fee
 
+## 3.0.17 - 13 Feb 2025
+- Disponibilidad de horarios según hora actual para envíos del mismo día
+- Turno mañana (9am-12pm): solo disponible si es antes de las 8am
+- Turno tarde (1pm-4pm): solo disponible si es antes de las 11am
+- Horarios no disponibles se muestran deshabilitados con "(No disponible)" en lugar de ocultarse
+- Validación en servidor para evitar pedidos con horarios ya vencidos
+
 ## 3.0.16 - 4 Feb 2025
 - Sincronizada dirección de facturación con dirección de envío (dirección 1 y 2)
 - Fecha y horario de envío ahora también se guardan en dirección 2 de facturación
