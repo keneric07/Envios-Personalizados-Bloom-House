@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Delivery Express - Envíos Programados y Personalizados
  * Description: Permite a tus clientes elegir fecha y horario de entrega, configurar zonas de envío con precios personalizados, y gestionar retiros en tienda. Mejora la experiencia de compra con entregas a medida.
- * Version: 3.0.17
+ * Version: 3.0.16
  * Author: Keneric / HWStudio Labs
  * Text Domain: envio-fee
  */
@@ -283,9 +283,7 @@ add_action('woocommerce_review_order_after_payment', function(){
                    placeholder="dd/mm/yyyy" value="<?php echo esc_attr($fecha_default_formateada); ?>" 
                    pattern="\d{2}/\d{2}/\d{4}" required aria-required="true" 
                    data-min-date="<?php echo esc_attr($fecha_minima); ?>" 
-                   data-permitir-mismo-dia="<?php echo esc_attr($permitir_mismo_dia); ?>"
-                   data-hora-actual="<?php echo esc_attr((int) date('G')); ?>"
-                   data-hoy-iso="<?php echo esc_attr($hoy); ?>">
+                   data-permitir-mismo-dia="<?php echo esc_attr($permitir_mismo_dia); ?>">
             <input type="hidden" id="fecha_envio_custom_iso" name="fecha_envio_custom_iso" value="<?php echo esc_attr($fecha_default); ?>">
         </p>
         <p class="form-row form-row-wide validate-required">
@@ -296,8 +294,8 @@ add_action('woocommerce_review_order_after_payment', function(){
             </label>
             <select id="horario_envio_custom" name="horario_envio_custom" class="select update_totals_on_change" required aria-required="true">
                 <option value=""><?php _e('Selecciona un horario…', 'envio-fee'); ?></option>
-                <option value="9am - 12 pm" data-slot="manana"><?php _e('9am - 12 pm', 'envio-fee'); ?></option>
-                <option value="1pm - 4 pm" data-slot="tarde"><?php _e('1pm - 4 pm', 'envio-fee'); ?></option>
+                <option value="9am - 12 pm"><?php _e('9am - 12 pm', 'envio-fee'); ?></option>
+                <option value="1pm - 4 pm"><?php _e('1pm - 4 pm', 'envio-fee'); ?></option>
             </select>
         </p>
         <p class="form-row form-row-wide">
@@ -382,35 +380,6 @@ add_action('woocommerce_review_order_after_payment', function(){
             // Variable global para permitir mismo día
             var permitirMismoDia = $('#fecha_envio_custom').data('permitir-mismo-dia') == 1;
             
-            // Actualizar disponibilidad de horarios según fecha seleccionada (solo aplica para mismo día)
-            function actualizarHorariosDisponibles(fechaISO) {
-                var $fechaInput = $('#fecha_envio_custom');
-                var horaActual = parseInt($fechaInput.data('hora-actual') || 0, 10);
-                var hoyISO = $fechaInput.data('hoy-iso') || '';
-                var $select = $('#horario_envio_custom');
-                var $opcionManana = $select.find('option[value="9am - 12 pm"]');
-                var $opcionTarde = $select.find('option[value="1pm - 4 pm"]');
-                var esMismoDia = (fechaISO === hoyISO);
-                var mananaLabel = '<?php echo esc_js(__('9am - 12 pm', 'envio-fee')); ?>';
-                var tardeLabel = '<?php echo esc_js(__('1pm - 4 pm', 'envio-fee')); ?>';
-                var noDisponible = ' (<?php echo esc_js(__('No disponible', 'envio-fee')); ?>)';
-                
-                if (!esMismoDia) {
-                    $opcionManana.prop('disabled', false).text(mananaLabel);
-                    $opcionTarde.prop('disabled', false).text(tardeLabel);
-                } else {
-                    // Mismo día: mañana (9-12) solo si hora < 8; tarde (1-4) solo si hora < 11
-                    var mananaDisponible = horaActual < 8;
-                    var tardeDisponible = horaActual < 11;
-                    $opcionManana.prop('disabled', !mananaDisponible).text(mananaDisponible ? mananaLabel : mananaLabel + noDisponible);
-                    $opcionTarde.prop('disabled', !tardeDisponible).text(tardeDisponible ? tardeLabel : tardeLabel + noDisponible);
-                }
-                if ($select.val() && $select.find('option:selected').prop('disabled')) {
-                    $select.val('');
-                }
-                pingTotals();
-            }
-            
             // Función para inicializar datepicker
             function inicializarDatepicker() {
                 var $fechaInput = $('#fecha_envio_custom');
@@ -458,7 +427,7 @@ add_action('woocommerce_review_order_after_payment', function(){
                             $('#fecha_envio_custom_iso').val(fechaISO);
                             $(this).removeClass('error');
                             $(this)[0].setCustomValidity('');
-                            actualizarHorariosDisponibles(fechaISO);
+                            pingTotals();
                         } else {
                             $(this).addClass('error');
                             var mensaje = permitirMismoDia 
@@ -495,7 +464,7 @@ add_action('woocommerce_review_order_after_payment', function(){
                         $('#fecha_envio_custom_iso').val(fechaISO);
                         $input.removeClass('error');
                         $input[0].setCustomValidity('');
-                        actualizarHorariosDisponibles(fechaISO);
+                        pingTotals();
                     } else {
                         $input.addClass('error');
                         if (!fechaISO) {
@@ -542,12 +511,8 @@ add_action('woocommerce_review_order_after_payment', function(){
                 // Inicializar datepicker después de que todo esté listo
                 inicializarDatepicker();
                 
-                // Validar fecha inicial y actualizar horarios disponibles
+                // Validar fecha inicial
                 $('#fecha_envio_custom').trigger('blur');
-                var fechaISO = $('#fecha_envio_custom_iso').val();
-                if (fechaISO) {
-                    actualizarHorariosDisponibles(fechaISO);
-                }
                 pingTotals();
             });
             
@@ -556,10 +521,6 @@ add_action('woocommerce_review_order_after_payment', function(){
                 setTimeout(function(){
                     if ($('#fecha_envio_custom').length > 0 && !$('#fecha_envio_custom').hasClass('hasDatepicker')) {
                         inicializarDatepicker();
-                    }
-                    var fechaISO = $('#fecha_envio_custom_iso').val();
-                    if (fechaISO) {
-                        actualizarHorariosDisponibles(fechaISO);
                     }
                 }, 100);
             });
@@ -594,7 +555,6 @@ function envio_fee_validate_checkout_fields() {
     // Validar fecha de envío (obligatoria siempre)
     $fecha_iso = !empty($_POST['fecha_envio_custom_iso']) ? sanitize_text_field($_POST['fecha_envio_custom_iso']) : '';
     $fecha_input = !empty($_POST['fecha_envio_custom']) ? sanitize_text_field($_POST['fecha_envio_custom']) : '';
-    $fecha = '';
     
     if (empty($fecha_iso) && empty($fecha_input)) {
         wc_add_notice(__('Por favor selecciona la fecha de envío.', 'envio-fee'), 'error');
@@ -639,19 +599,6 @@ function envio_fee_validate_checkout_fields() {
     // Validar horario de envío o retiro (obligatorio siempre)
     if (empty($_POST['horario_envio_custom'])) {
         wc_add_notice(__('Por favor selecciona el horario de envío o retiro.', 'envio-fee'), 'error');
-    } else {
-        // Validar que el horario sea válido para la fecha (solo aplica mismo día)
-        $hoy = date('Y-m-d');
-        $hora = (int) date('G');
-        $horario = sanitize_text_field($_POST['horario_envio_custom']);
-        if (!empty($fecha) && $fecha === $hoy) {
-            if ($horario === '9am - 12 pm' && $hora >= 8) {
-                wc_add_notice(__('El horario 9am - 12 pm ya no está disponible para hoy. Por favor selecciona otro horario o fecha.', 'envio-fee'), 'error');
-            }
-            if ($horario === '1pm - 4 pm' && $hora >= 11) {
-                wc_add_notice(__('El horario 1pm - 4 pm ya no está disponible para hoy. Por favor selecciona otro horario o fecha.', 'envio-fee'), 'error');
-            }
-        }
     }
 
     // Validar campos obligatorios cuando es delivery
