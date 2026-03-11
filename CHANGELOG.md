@@ -1,5 +1,10 @@
 # Changelog - Envío Personalizado con Fee
 
+## 3.0.17 - 11 Mar 2026
+- Integrada librería `intl-tel-input` en el checkout para el campo de teléfono de facturación con selector de banderas.
+- Geolocalización automática del país por IP usando `ipapi.co` con fallback a Panamá.
+- Inicialización compatible con recargas AJAX de WooCommerce (`updated_checkout`) para evitar que desaparezca el selector de teléfono.
+
 ## 3.0.16 - 4 Feb 2025
 - Sincronizada dirección de facturación con dirección de envío (dirección 1 y 2)
 - Fecha y horario de envío ahora también se guardan en dirección 2 de facturación

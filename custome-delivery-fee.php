@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Delivery Express - Envíos Programados y Personalizados
  * Description: Permite a tus clientes elegir fecha y horario de entrega, configurar zonas de envío con precios personalizados, y gestionar retiros en tienda. Mejora la experiencia de compra con entregas a medida.
- * Version: 3.0.16
+ * Version: 3.0.17
  * Author: Keneric / HWStudio Labs
  * Text Domain: envio-fee
  */
@@ -75,12 +75,118 @@ function envio_fee_get_zones() {
     return $zones;
 }
 
-// Enqueue Dashicons and jQuery UI Datepicker for frontend
+// Enqueue Dashicons, jQuery UI Datepicker e intl-tel-input para frontend
 add_action('wp_enqueue_scripts', function(){
     if (is_checkout()) {
         wp_enqueue_style('dashicons');
         wp_enqueue_script('jquery-ui-datepicker');
-        wp_enqueue_style('jquery-ui-datepicker', 'https://code.jquery.com/ui/1.13.2/themes/ui-lightness/jquery-ui.css', array(), '1.13.2');
+        wp_enqueue_style(
+            'jquery-ui-datepicker',
+            'https://code.jquery.com/ui/1.13.2/themes/ui-lightness/jquery-ui.css',
+            array(),
+            '1.13.2'
+        );
+
+        // intl-tel-input CSS (CDN)
+        wp_enqueue_style(
+            'envio-fee-intl-tel-input',
+            'https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/18.5.3/css/intlTelInput.min.css',
+            array(),
+            '18.5.3'
+        );
+
+        // intl-tel-input JS + utils (CDN)
+        wp_enqueue_script(
+            'envio-fee-intl-tel-input',
+            'https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/18.5.3/js/intlTelInput.min.js',
+            array('jquery'),
+            '18.5.3',
+            true
+        );
+
+        wp_enqueue_script(
+            'envio-fee-intl-tel-input-utils',
+            'https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/18.5.3/js/utils.js',
+            array('envio-fee-intl-tel-input'),
+            '18.5.3',
+            true
+        );
+
+        // JS inline para inicializar intl-tel-input en el campo de teléfono de facturación
+        $inline_js = <<<'JS'
+(function($){
+    function initBillingPhoneIntlTel() {
+        var input = document.querySelector('#billing_phone');
+        if (!input) {
+            return;
+        }
+
+        // Evitar re-inicializar múltiples veces el mismo input
+        if (input.dataset.itiInitialized === '1') {
+            return;
+        }
+
+        if (typeof window.intlTelInput === 'undefined') {
+            // Si aún no cargó la librería, reintentar brevemente
+            setTimeout(initBillingPhoneIntlTel, 300);
+            return;
+        }
+
+        var iti = window.intlTelInput(input, {
+            initialCountry: 'auto',
+            separateDialCode: true,
+            utilsScript: 'https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/18.5.3/js/utils.js',
+            geoIpLookup: function(callback) {
+                fetch('https://ipapi.co/json/')
+                    .then(function(res){ return res.json(); })
+                    .then(function(data){
+                        var countryCode = (data && data.country_code) ? data.country_code.toLowerCase() : 'pa';
+                        callback(countryCode);
+                    })
+                    .catch(function(){
+                        callback('pa'); // Fallback a Panamá
+                    });
+            }
+        });
+
+        input.dataset.itiInitialized = '1';
+
+        function syncFullNumber() {
+            var fullNumber = iti.getNumber();
+            if (!fullNumber) {
+                return;
+            }
+
+            // Guardar el número completo (incluyendo código de país) en el mismo campo billing_phone
+            input.value = fullNumber;
+        }
+
+        // Sincronizar al cambiar país o al salir del campo
+        input.addEventListener('countrychange', syncFullNumber);
+        input.addEventListener('blur', syncFullNumber);
+
+        // Sincronizar inmediatamente si ya hay valor
+        if (input.value) {
+            syncFullNumber();
+        }
+    }
+
+    // Inicializar al cargar el DOM en el checkout
+    $(document).ready(function(){
+        if ($('form.checkout').length) {
+            // Pequeño delay para asegurarnos de que WooCommerce haya renderizado los campos
+            setTimeout(initBillingPhoneIntlTel, 200);
+        }
+    });
+
+    // Re-inicializar cada vez que WooCommerce refresca el checkout vía AJAX
+    $(document.body).on('updated_checkout', function(){
+        setTimeout(initBillingPhoneIntlTel, 200);
+    });
+})(jQuery);
+JS;
+
+        wp_add_inline_script('envio-fee-intl-tel-input-utils', $inline_js);
     }
 });
 
