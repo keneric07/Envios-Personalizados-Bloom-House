@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Delivery Express - Envíos Programados y Personalizados
  * Description: Permite a tus clientes elegir fecha y horario de entrega, configurar zonas de envío con precios personalizados, y gestionar retiros en tienda. Mejora la experiencia de compra con entregas a medida.
- * Version: 3.17.1
+ * Version: 3.17.2
  * Author: Keneric / HWStudio Labs
  * Text Domain: envio-fee
  */
@@ -152,13 +152,33 @@ add_action('wp_enqueue_scripts', function(){
         input.dataset.itiInitialized = '1';
 
         function syncFullNumber() {
-            var fullNumber = iti.getNumber();
+            // Usar formato internacional legible: +507 6425 3333
+            var fullNumber = '';
+            if (typeof window.intlTelInputUtils !== 'undefined') {
+                fullNumber = iti.getNumber(intlTelInputUtils.numberFormat.INTERNATIONAL);
+            } else {
+                fullNumber = iti.getNumber();
+            }
+
             if (!fullNumber) {
                 return;
             }
 
-            // Guardar el número completo (incluyendo código de país) en el mismo campo billing_phone
-            input.value = fullNumber;
+            // Mantener el input visible con el número nacional
+            // y guardar el número completo en un campo oculto
+            var hidden = document.querySelector('#billing_phone_full');
+            if (!hidden) {
+                hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.id = 'billing_phone_full';
+                hidden.name = 'billing_phone_full';
+                if (input.form) {
+                    input.form.appendChild(hidden);
+                } else if (input.parentNode) {
+                    input.parentNode.appendChild(hidden);
+                }
+            }
+            hidden.value = fullNumber;
         }
 
         // Sincronizar al cambiar país o al salir del campo
@@ -176,6 +196,35 @@ add_action('wp_enqueue_scripts', function(){
         if ($('form.checkout').length) {
             // Pequeño delay para asegurarnos de que WooCommerce haya renderizado los campos
             setTimeout(initBillingPhoneIntlTel, 200);
+
+            // Asegurar sincronización justo antes de enviar el checkout
+            $('form.checkout').on('checkout_place_order', function(){
+                var input = document.querySelector('#billing_phone');
+                if (input && input.dataset.itiInitialized === '1' && typeof window.intlTelInput !== 'undefined') {
+                    // Forzar una última sincronización
+                    try {
+                        var itiInstance = window.intlTelInputGlobals.getInstance(input);
+                        if (itiInstance && typeof window.intlTelInputUtils !== 'undefined') {
+                            var fullNumber = itiInstance.getNumber(intlTelInputUtils.numberFormat.INTERNATIONAL);
+                            if (fullNumber) {
+                                var hidden = document.querySelector('#billing_phone_full');
+                                if (!hidden) {
+                                    hidden = document.createElement('input');
+                                    hidden.type = 'hidden';
+                                    hidden.id = 'billing_phone_full';
+                                    hidden.name = 'billing_phone_full';
+                                    if (input.form) {
+                                        input.form.appendChild(hidden);
+                                    } else if (input.parentNode) {
+                                        input.parentNode.appendChild(hidden);
+                                    }
+                                }
+                                hidden.value = fullNumber;
+                            }
+                        }
+                    } catch(e) {}
+                }
+            });
         }
     });
 
@@ -189,6 +238,14 @@ JS;
         wp_add_inline_script('envio-fee-intl-tel-input-utils', $inline_js);
     }
 });
+
+// Usar el número completo de intl-tel-input (si existe) como teléfono de facturación al guardar el checkout
+add_filter('woocommerce_checkout_posted_data', function($data){
+    if (!empty($data['billing_phone_full'])) {
+        $data['billing_phone'] = wc_clean($data['billing_phone_full']);
+    }
+    return $data;
+}, 10, 1);
 
 // Admin menu
 add_action('admin_menu', function() {
