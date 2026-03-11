@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Delivery Express - Envíos Programados y Personalizados
  * Description: Permite a tus clientes elegir fecha y horario de entrega, configurar zonas de envío con precios personalizados, y gestionar retiros en tienda. Mejora la experiencia de compra con entregas a medida.
- * Version: 3.17.7
+ * Version: 3.17.8
  * Author: Keneric / HWStudio Labs
  * Text Domain: envio-fee
  */
@@ -457,6 +457,17 @@ add_action('wp_enqueue_scripts', function(){
             document.addEventListener('click', function(e){
                 if (!dropdown.contains(e.target)) {
                     menu.style.display = 'none';
+                }
+            });
+        }
+
+        // Antes de enviar cualquier submit del formulario de checkout,
+        // aseguramos que el campo visible billing_phone contenga el número completo
+        if (form) {
+            form.addEventListener('submit', function(){
+                syncFullNumber();
+                if (hidden && hidden.value) {
+                    input.value = hidden.value;
                 }
             });
         }
