@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Delivery Express - Envíos Programados y Personalizados
  * Description: Permite a tus clientes elegir fecha y horario de entrega, configurar zonas de envío con precios personalizados, y gestionar retiros en tienda. Mejora la experiencia de compra con entregas a medida.
- * Version: 3.17.6
+ * Version: 3.17.7
  * Author: Keneric / HWStudio Labs
  * Text Domain: envio-fee
  */
@@ -709,14 +709,81 @@ add_action('woocommerce_review_order_after_payment', function(){
             .ui-datepicker {
                 z-index: 9999 !important;
             }
-            /* Ajustes mínimos para intl-tel-input en caso de que el CSS externo no cargue correctamente */
-            .iti__country-list {
-                list-style: none;
-                margin: 0;
-                padding: 0;
+            /* Wrapper del selector de país + teléfono */
+            .envio-fee-phone-wrapper {
+                display: flex;
+                align-items: stretch;
+                gap: 8px;
             }
-            .iti__country-list.iti__hide {
-                display: none;
+            .envio-fee-phone-wrapper .input-text {
+                flex: 1 1 auto;
+            }
+            /* Botón estilo <select> */
+            .envio-fee-phone-dropdown {
+                position: relative;
+                flex: 0 0 230px;
+                max-width: 230px;
+            }
+            .envio-fee-phone-toggle {
+                width: 100%;
+                padding: 6px 32px 6px 10px;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                background-color: #fff;
+                font-size: 14px;
+                text-align: left;
+                cursor: pointer;
+                position: relative;
+                color: #333;
+                box-sizing: border-box;
+            }
+            .envio-fee-phone-toggle:after {
+                content: "";
+                position: absolute;
+                right: 10px;
+                top: 50%;
+                margin-top: -2px;
+                border-width: 5px 4px 0 4px;
+                border-style: solid;
+                border-color: #555 transparent transparent transparent;
+            }
+            /* Menú desplegable */
+            .envio-fee-phone-menu {
+                position: absolute;
+                top: 100%;
+                left: 0;
+                right: 0;
+                z-index: 9999;
+                margin-top: 2px;
+                background-color: #fff;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+                box-sizing: border-box;
+            }
+            .envio-fee-phone-country-search {
+                width: 100%;
+                box-sizing: border-box;
+                padding: 6px 8px;
+                border: none;
+                border-bottom: 1px solid #eee;
+                font-size: 13px;
+                outline: none;
+            }
+            .envio-fee-phone-list {
+                max-height: 180px;
+                overflow-y: auto;
+                padding: 0;
+                margin: 0;
+                list-style: none;
+            }
+            .envio-fee-phone-item {
+                padding: 6px 10px;
+                font-size: 13px;
+                cursor: pointer;
+            }
+            .envio-fee-phone-item:hover {
+                background-color: #f4f4f4;
             }
         </style>
         <p class="form-row form-row-wide validate-required">
