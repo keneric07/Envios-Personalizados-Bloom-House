@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Delivery Express - Envíos Programados y Personalizados
  * Description: Permite a tus clientes elegir fecha y horario de entrega, configurar zonas de envío con precios personalizados, y gestionar retiros en tienda. Mejora la experiencia de compra con entregas a medida.
- * Version: 3.17.8
+ * Version: 3.17.9
  * Author: Keneric / HWStudio Labs
  * Text Domain: envio-fee
  */
@@ -524,11 +524,22 @@ JS;
     }
 });
 
-// Usar el número completo de intl-tel-input (si existe) como teléfono de facturación al guardar el checkout
+// Normalizar teléfono de facturación usando país seleccionado y número ingresado
 add_filter('woocommerce_checkout_posted_data', function($data){
-    if (!empty($data['billing_phone_full'])) {
+    $phone      = isset($data['billing_phone']) ? wc_clean($data['billing_phone']) : '';
+    $country_cc = isset($data['billing_phone_country']) ? preg_replace('/\D+/', '', $data['billing_phone_country']) : '';
+
+    if ($country_cc && $phone) {
+        // Limpiar el número quitando espacios, guiones, paréntesis, etc.
+        $clean_number = preg_replace('/\D+/', '', $phone);
+        if ($clean_number !== '') {
+            $data['billing_phone'] = '+' . $country_cc . ' ' . $clean_number;
+        }
+    } elseif (!empty($data['billing_phone_full'])) {
+        // Fallback por compatibilidad con versiones previas
         $data['billing_phone'] = wc_clean($data['billing_phone_full']);
     }
+
     return $data;
 }, 10, 1);
 
