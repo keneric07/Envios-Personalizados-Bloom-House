@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Delivery Express - Envíos Programados y Personalizados
  * Description: Permite a tus clientes elegir fecha y horario de entrega, configurar zonas de envío con precios personalizados, y gestionar retiros en tienda. Mejora la experiencia de compra con entregas a medida.
- * Version: 3.17.4
+ * Version: 3.17.5
  * Author: Keneric / HWStudio Labs
  * Text Domain: envio-fee
  */
@@ -361,7 +361,7 @@ add_action('wp_enqueue_scripts', function(){
             return;
         }
 
-        // Crear contenedor para poner el select y el input uno al lado del otro
+        // Crear contenedor para poner el buscador, el select y el input uno al lado del otro
         var wrapper = document.createElement('div');
         wrapper.className = 'envio-fee-phone-wrapper';
 
@@ -372,9 +372,16 @@ add_action('wp_enqueue_scripts', function(){
         // Panamá (+507) como código por defecto
         var defaultCode = '507';
         var selectHtml = buildPhoneCountrySelectHtml(defaultCode);
+
+        // Campo de búsqueda para filtrar/ir al país
+        var searchHtml = '<input type="text" id="billing_phone_country_search" class="envio-fee-phone-country-search" placeholder="Buscar país..." autocomplete="off" />';
+
+        // Insertar buscador + select antes del input
         wrapper.insertAdjacentHTML('afterbegin', selectHtml);
+        wrapper.insertAdjacentHTML('afterbegin', searchHtml);
 
         var select = wrapper.querySelector('#billing_phone_country');
+        var search = wrapper.querySelector('#billing_phone_country_search');
 
         // Crear/obtener campo oculto para el número completo
         var form = input.form || document.querySelector('form.checkout');
@@ -413,6 +420,24 @@ add_action('wp_enqueue_scripts', function(){
         select.addEventListener('change', syncFullNumber);
         input.addEventListener('input', syncFullNumber);
         input.addEventListener('blur', syncFullNumber);
+
+        // Buscador simple: al escribir, selecciona el primer país cuyo label contenga el texto
+        if (search) {
+            search.addEventListener('input', function(){
+                var term = search.value.trim().toLowerCase();
+                if (!term) {
+                    return;
+                }
+                var options = Array.prototype.slice.call(select.options);
+                var found = options.find(function(opt){
+                    return opt.text.toLowerCase().indexOf(term) !== -1;
+                });
+                if (found) {
+                    select.value = found.value;
+                    syncFullNumber();
+                }
+            });
+        }
 
         // Marcar como inicializado y sincronizar valor inicial si existe
         input.dataset.envioFeePhoneInitialized = '1';
