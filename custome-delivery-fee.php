@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Delivery Express - Envíos Programados y Personalizados
  * Description: Permite a tus clientes elegir fecha y horario de entrega, configurar zonas de envío con precios personalizados, y gestionar retiros en tienda. Mejora la experiencia de compra con entregas a medida.
- * Version: 3.17.5
+ * Version: 3.17.6
  * Author: Keneric / HWStudio Labs
  * Text Domain: envio-fee
  */
@@ -341,12 +341,25 @@ add_action('wp_enqueue_scripts', function(){
             { code: '358', label: 'Åland Islands (+358)' }
         ];
 
-        var html = '<select id="billing_phone_country" name="billing_phone_country" class="envio-fee-phone-country">';
+        // Encontrar país seleccionado para mostrar en el botón
+        var current = options.find(function(opt){ return opt.code === selectedCode; }) || options.find(function(opt){ return opt.code === '507'; });
+        var currentLabel = current ? current.label : 'Seleccionar país';
+        var currentCode = current ? current.code : '';
+
+        var html = '';
+        html += '<div class="envio-fee-phone-dropdown" id="envio_fee_phone_dropdown">';
+        html += '  <button type="button" class="envio-fee-phone-toggle">' + currentLabel + '</button>';
+        html += '  <div class="envio-fee-phone-menu" style="display:none;">';
+        html += '    <input type="text" class="envio-fee-phone-country-search" placeholder="Buscar país..." autocomplete="off" />';
+        html += '    <ul class="envio-fee-phone-list">';
         options.forEach(function(opt){
-            var selected = (opt.code === selectedCode) ? ' selected="selected"' : '';
-            html += '<option value="' + opt.code + '"' + selected + '>' + opt.label + '</option>';
+            html += '      <li class="envio-fee-phone-item" data-code="' + opt.code + '">' + opt.label + '</li>';
         });
-        html += '</select>';
+        html += '    </ul>';
+        html += '  </div>';
+        html += '</div>';
+        // Input oculto que se manda en el formulario
+        html += '<input type="hidden" id="billing_phone_country" name="billing_phone_country" value="' + currentCode + '" />';
         return html;
     }
 
@@ -361,7 +374,7 @@ add_action('wp_enqueue_scripts', function(){
             return;
         }
 
-        // Crear contenedor para poner el buscador, el select y el input uno al lado del otro
+        // Crear contenedor para poner el dropdown personalizado y el input uno al lado del otro
         var wrapper = document.createElement('div');
         wrapper.className = 'envio-fee-phone-wrapper';
 
@@ -371,17 +384,17 @@ add_action('wp_enqueue_scripts', function(){
 
         // Panamá (+507) como código por defecto
         var defaultCode = '507';
-        var selectHtml = buildPhoneCountrySelectHtml(defaultCode);
+        var dropdownHtml = buildPhoneCountrySelectHtml(defaultCode);
 
-        // Campo de búsqueda para filtrar/ir al país
-        var searchHtml = '<input type="text" id="billing_phone_country_search" class="envio-fee-phone-country-search" placeholder="Buscar país..." autocomplete="off" />';
+        // Insertar dropdown personalizado antes del input
+        wrapper.insertAdjacentHTML('afterbegin', dropdownHtml);
 
-        // Insertar buscador + select antes del input
-        wrapper.insertAdjacentHTML('afterbegin', selectHtml);
-        wrapper.insertAdjacentHTML('afterbegin', searchHtml);
-
-        var select = wrapper.querySelector('#billing_phone_country');
-        var search = wrapper.querySelector('#billing_phone_country_search');
+        var dropdown = wrapper.querySelector('.envio-fee-phone-dropdown');
+        var toggle = dropdown ? dropdown.querySelector('.envio-fee-phone-toggle') : null;
+        var menu = dropdown ? dropdown.querySelector('.envio-fee-phone-menu') : null;
+        var search = dropdown ? dropdown.querySelector('.envio-fee-phone-country-search') : null;
+        var items = dropdown ? dropdown.querySelectorAll('.envio-fee-phone-item') : [];
+        var countryInput = wrapper.querySelector('#billing_phone_country');
 
         // Crear/obtener campo oculto para el número completo
         var form = input.form || document.querySelector('form.checkout');
@@ -399,7 +412,7 @@ add_action('wp_enqueue_scripts', function(){
         }
 
         function syncFullNumber() {
-            var code = select.value || '';
+            var code = countryInput ? countryInput.value : '';
             var number = input.value.trim();
 
             if (!code && !number) {
@@ -416,26 +429,57 @@ add_action('wp_enqueue_scripts', function(){
             }
         }
 
-        // Sincronizar al cambiar país o al escribir/salir del campo
-        select.addEventListener('change', syncFullNumber);
+        // Gestionar selección de país en el dropdown personalizado
+        if (toggle && menu && items.length) {
+            toggle.addEventListener('click', function(e){
+                e.preventDefault();
+                var isOpen = menu.style.display === 'block';
+                menu.style.display = isOpen ? 'none' : 'block';
+            });
+
+            items.forEach(function(item){
+                item.addEventListener('click', function(e){
+                    e.preventDefault();
+                    var code = item.getAttribute('data-code') || '';
+                    var label = item.textContent || item.innerText || '';
+                    if (countryInput) {
+                        countryInput.value = code;
+                    }
+                    if (toggle && label) {
+                        toggle.textContent = label;
+                    }
+                    menu.style.display = 'none';
+                    syncFullNumber();
+                });
+            });
+
+            // Cerrar al hacer click fuera
+            document.addEventListener('click', function(e){
+                if (!dropdown.contains(e.target)) {
+                    menu.style.display = 'none';
+                }
+            });
+        }
+
+        // Sincronizar número al escribir/salir del campo
         input.addEventListener('input', syncFullNumber);
         input.addEventListener('blur', syncFullNumber);
 
-        // Buscador simple: al escribir, selecciona el primer país cuyo label contenga el texto
+        // Buscador dentro del menú: filtra las opciones por texto
         if (search) {
             search.addEventListener('input', function(){
                 var term = search.value.trim().toLowerCase();
                 if (!term) {
+                    // Mostrar todas las opciones si no hay término
+                    items.forEach(function(item){
+                        item.style.display = '';
+                    });
                     return;
                 }
-                var options = Array.prototype.slice.call(select.options);
-                var found = options.find(function(opt){
-                    return opt.text.toLowerCase().indexOf(term) !== -1;
+                items.forEach(function(item){
+                    var text = (item.textContent || item.innerText || '').toLowerCase();
+                    item.style.display = text.indexOf(term) !== -1 ? '' : 'none';
                 });
-                if (found) {
-                    select.value = found.value;
-                    syncFullNumber();
-                }
             });
         }
 
