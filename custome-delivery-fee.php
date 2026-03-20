@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Delivery Express - Envíos Programados y Personalizados
  * Description: Permite a tus clientes elegir fecha y horario de entrega, configurar zonas de envío con precios personalizados, y gestionar retiros en tienda. Mejora la experiencia de compra con entregas a medida.
- * Version: 3.17.11
+ * Version: 3.17.12
  * Author: Keneric / HWStudio Labs
  * Text Domain: envio-fee
  */
@@ -230,8 +230,50 @@ add_action('wp_enqueue_scripts', function(){
         $phone.val(localNumber);
         $phone.data('envioPhoneInit', 1);
 
-        $(document).on('change', '#billing_phone_country_code', function(){});
-        $(document).on('input blur', '#billing_phone', function(){});
+        if (!$(document).data('envioPhoneFieldBind')) {
+            var syncDebounce = null;
+            function syncSoon() {
+                clearTimeout(syncDebounce);
+                syncDebounce = setTimeout(syncPhoneToInternational, 120);
+            }
+
+            // Al cambiar país o salir del input, persistir el formato internacional
+            $(document).on('change', '#billing_phone_country_code', function(){
+                syncPhoneToInternational();
+            });
+            $(document).on('input', '#billing_phone', function(){
+                syncSoon();
+            });
+            $(document).on('blur', '#billing_phone', function(){
+                syncPhoneToInternational();
+            });
+            // Compatibilidad con botones "Guardar los cambios" de checkout por pasos
+            $(document).on('click', 'button, input[type="submit"]', function(){
+                var text = '';
+                if (typeof $(this).text === 'function') {
+                    text = ($(this).text() || '').toLowerCase();
+                }
+                var val = (($(this).val && $(this).val()) || '').toLowerCase();
+                if (text.indexOf('guardar') !== -1 || val.indexOf('guardar') !== -1) {
+                    syncPhoneToInternational();
+                }
+            });
+
+            // Fluent Checkout y otros checkouts AJAX: sincronizar antes de cualquier request
+            $(document).ajaxSend(function(){
+                syncPhoneToInternational();
+            });
+
+            // Si Fluent re-renderiza bloques sin updated_checkout, volver a inyectar el select
+            var moTarget = document.body;
+            if (moTarget && typeof MutationObserver !== 'undefined') {
+                var observer = new MutationObserver(function(){
+                    initPhoneCountrySelect();
+                });
+                observer.observe(moTarget, { childList: true, subtree: true });
+            }
+            $(document).data('envioPhoneFieldBind', 1);
+        }
 
         var $form = $('form.checkout');
         if ($form.length && !$form.data('envioPhoneSubmitBind')) {
