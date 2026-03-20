@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Delivery Express - Envíos Programados y Personalizados
  * Description: Permite a tus clientes elegir fecha y horario de entrega, configurar zonas de envío con precios personalizados, y gestionar retiros en tienda. Mejora la experiencia de compra con entregas a medida.
- * Version: 3.17.13
+ * Version: 3.17.14
  * Author: Keneric / HWStudio Labs
  * Text Domain: envio-fee
  */
@@ -169,6 +169,14 @@ add_action('wp_enqueue_scripts', function(){
         { label: 'Åland Islands', code: '358' }
     ];
 
+    // Mantener un unico registro para codigo +1: solo United States
+    countries = countries.filter(function(c){
+        if (c.code === '1') {
+            return c.label === 'United States';
+        }
+        return true;
+    });
+
     function uniqueCodesDesc() {
         var map = {};
         countries.forEach(function(c){ map[c.code] = true; });
@@ -209,6 +217,13 @@ add_action('wp_enqueue_scripts', function(){
         if (!$phone.length || !$country.length) return;
         var code = ($country.val() || '').replace(/\D+/g, '');
         var local = ($phone.val() || '').replace(/\D+/g, '');
+
+        // Si el usuario escribe el numero con prefijo internacional (ej: +1 (209)...),
+        // quitar una sola vez el codigo pais para evitar duplicarlo.
+        if (code && local.indexOf(code) === 0 && local.length > (code.length + 6)) {
+            local = local.slice(code.length);
+        }
+
         if (code && local) {
             $phone.val('+' + code + ' ' + local);
         }
