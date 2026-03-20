@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Delivery Express - Envíos Programados y Personalizados
  * Description: Permite a tus clientes elegir fecha y horario de entrega, configurar zonas de envío con precios personalizados, y gestionar retiros en tienda. Mejora la experiencia de compra con entregas a medida.
- * Version: 3.17.14
+ * Version: 3.17.15
  * Author: Keneric / HWStudio Labs
  * Text Domain: envio-fee
  */
@@ -216,16 +216,30 @@ add_action('wp_enqueue_scripts', function(){
         var $country = $('#billing_phone_country_code');
         if (!$phone.length || !$country.length) return;
         var code = ($country.val() || '').replace(/\D+/g, '');
-        var local = ($phone.val() || '').replace(/\D+/g, '');
+        var raw = ($phone.val() || '').trim();
 
-        // Si el usuario escribe el numero con prefijo internacional (ej: +1 (209)...),
-        // quitar una sola vez el codigo pais para evitar duplicarlo.
-        if (code && local.indexOf(code) === 0 && local.length > (code.length + 6)) {
-            local = local.slice(code.length);
+        if (!code || !raw) {
+            return;
         }
 
-        if (code && local) {
-            $phone.val('+' + code + ' ' + local);
+        // Conservar formato humano (parentesis/guiones/espacios), pero evitar duplicar prefijo.
+        // Ejemplos:
+        // "+1 (209) 735-0914" -> "(209) 735-0914"
+        // "1 209 7350914" -> "209 7350914"
+        // "(209) 735-0914" -> "(209) 735-0914"
+        var prefixRegex = new RegExp('^\\+?\\s*' + code + '[\\s\\-\\.\\)]*');
+        var localFormatted = raw.replace(prefixRegex, '').trim();
+
+        if (!localFormatted) {
+            // fallback por si el usuario solo escribió dígitos/código
+            localFormatted = raw.replace(/\D+/g, '');
+            if (localFormatted.indexOf(code) === 0 && localFormatted.length > code.length) {
+                localFormatted = localFormatted.slice(code.length);
+            }
+        }
+
+        if (localFormatted) {
+            $phone.val('+' + code + ' ' + localFormatted);
         }
     }
 
