@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Delivery Express - Envíos Programados y Personalizados
  * Description: Permite a tus clientes elegir fecha y horario de entrega, configurar zonas de envío con precios personalizados, y gestionar retiros en tienda. Mejora la experiencia de compra con entregas a medida.
- * Version: 3.17.16
+ * Version: 3.18.0
  * Author: Keneric / HWStudio Labs
  * Text Domain: envio-fee
  */
@@ -73,6 +73,77 @@ function envio_fee_get_zones() {
         update_option('envio_fee_zones', $zones);
     }
     return $zones;
+}
+
+// ¿Se aceptan pedidos para los domingos? (por defecto sí, para no alterar tiendas existentes)
+function envio_fee_domingos_permitidos() {
+    return (int) get_option('envio_fee_permitir_domingos', 1) === 1;
+}
+
+// Monto del recargo por domingo (0 si no aplica)
+function envio_fee_recargo_domingo() {
+    if ( ! envio_fee_domingos_permitidos() ) {
+        return 0.0;
+    }
+    if ( (int) get_option('envio_fee_recargo_domingo_activo', 0) !== 1 ) {
+        return 0.0;
+    }
+    return max(0, floatval(get_option('envio_fee_recargo_domingo_monto', 0)));
+}
+
+// Normaliza una fecha en yyyy-mm-dd o dd/mm/yyyy a yyyy-mm-dd ('' si es inválida)
+function envio_fee_normalizar_fecha($valor) {
+    $valor = trim((string) $valor);
+    if ($valor === '') {
+        return '';
+    }
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $valor)) {
+        return strtotime($valor) === false ? '' : $valor;
+    }
+    if (preg_match('#^(\d{1,2})/(\d{1,2})/(\d{4})$#', $valor, $m)) {
+        if ( ! checkdate((int) $m[2], (int) $m[1], (int) $m[3]) ) {
+            return '';
+        }
+        return sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
+    }
+    return '';
+}
+
+// ¿La fecha cae en domingo?
+function envio_fee_es_domingo($fecha) {
+    $fecha = envio_fee_normalizar_fecha($fecha);
+    if ($fecha === '') {
+        return false;
+    }
+    return date('w', strtotime($fecha)) === '0';
+}
+
+// Primera fecha seleccionable según configuración (mismo día y domingos)
+function envio_fee_fecha_minima() {
+    $permitir_mismo_dia = (int) get_option('envio_fee_permitir_mismo_dia', 0) === 1;
+    $fecha = $permitir_mismo_dia ? date('Y-m-d') : date('Y-m-d', strtotime('+1 day'));
+    if ( ! envio_fee_domingos_permitidos() ) {
+        while (date('w', strtotime($fecha)) === '0') {
+            $fecha = date('Y-m-d', strtotime($fecha . ' +1 day'));
+        }
+    }
+    return $fecha;
+}
+
+// Fecha elegida por el cliente: primero el POST del checkout, luego la sesión
+function envio_fee_get_fecha_seleccionada() {
+    foreach (array('fecha_envio_custom_iso', 'fecha_envio_custom') as $campo) {
+        if ( ! empty($_POST[$campo]) ) {
+            $fecha = envio_fee_normalizar_fecha( sanitize_text_field( wp_unslash($_POST[$campo]) ) );
+            if ($fecha !== '') {
+                return $fecha;
+            }
+        }
+    }
+    if (function_exists('WC') && WC()->session) {
+        return envio_fee_normalizar_fecha( (string) WC()->session->get('envio_fee_fecha') );
+    }
+    return '';
 }
 
 // Enqueue Dashicons and jQuery UI Datepicker for frontend
@@ -372,6 +443,16 @@ function envio_fee_settings_page() {
         // Guardar opción de permitir pedidos del mismo día
         $permitir_mismo_dia = !empty($_POST['envio_fee_permitir_mismo_dia']) ? 1 : 0;
         update_option('envio_fee_permitir_mismo_dia', $permitir_mismo_dia);
+
+        // Guardar opciones de domingos
+        $permitir_domingos = !empty($_POST['envio_fee_permitir_domingos']) ? 1 : 0;
+        update_option('envio_fee_permitir_domingos', $permitir_domingos);
+
+        $recargo_domingo_activo = !empty($_POST['envio_fee_recargo_domingo_activo']) ? 1 : 0;
+        update_option('envio_fee_recargo_domingo_activo', $recargo_domingo_activo);
+
+        $recargo_domingo_monto = isset($_POST['envio_fee_recargo_domingo_monto']) ? floatval($_POST['envio_fee_recargo_domingo_monto']) : 0;
+        update_option('envio_fee_recargo_domingo_monto', max(0, $recargo_domingo_monto));
         
         echo '<div class="updated"><p>'.__('Configuración guardada correctamente.', 'envio-fee').'</p></div>';
     }
@@ -391,7 +472,12 @@ function envio_fee_settings_page() {
         </h2>
         
         <?php if ($active_tab == 'settings'): ?>
-            <?php $permitir_mismo_dia = get_option('envio_fee_permitir_mismo_dia', 0); ?>
+            <?php
+            $permitir_mismo_dia     = get_option('envio_fee_permitir_mismo_dia', 0);
+            $permitir_domingos      = get_option('envio_fee_permitir_domingos', 1);
+            $recargo_domingo_activo = get_option('envio_fee_recargo_domingo_activo', 0);
+            $recargo_domingo_monto  = get_option('envio_fee_recargo_domingo_monto', 0);
+            ?>
             <h2><?php _e('Configuración General', 'envio-fee'); ?></h2>
             <form method="post">
                 <?php wp_nonce_field('envio_fee_save_action', 'envio_fee_nonce'); ?>
@@ -409,8 +495,62 @@ function envio_fee_settings_page() {
                                 <p class="description"><?php _e('Si está desactivado, los clientes solo podrán seleccionar fechas a partir de mañana.', 'envio-fee'); ?></p>
                             </td>
                         </tr>
+                        <tr>
+                            <th scope="row">
+                                <label for="envio_fee_permitir_domingos"><?php _e('Se aceptan pedidos para los domingos', 'envio-fee'); ?></label>
+                            </th>
+                            <td>
+                                <label>
+                                    <input type="checkbox" name="envio_fee_permitir_domingos" id="envio_fee_permitir_domingos" value="1" <?php checked($permitir_domingos, 1); ?>>
+                                    <?php _e('Permitir que los clientes seleccionen domingos como fecha de envío o retiro', 'envio-fee'); ?>
+                                </label>
+                                <p class="description"><?php _e('Si está desactivado, los domingos aparecerán bloqueados en el calendario del checkout.', 'envio-fee'); ?></p>
+                            </td>
+                        </tr>
+                        <tr class="envio-fee-domingo-opcion">
+                            <th scope="row">
+                                <label for="envio_fee_recargo_domingo_activo"><?php _e('Aplicar recargo los domingos', 'envio-fee'); ?></label>
+                            </th>
+                            <td>
+                                <label>
+                                    <input type="checkbox" name="envio_fee_recargo_domingo_activo" id="envio_fee_recargo_domingo_activo" value="1" <?php checked($recargo_domingo_activo, 1); ?>>
+                                    <?php _e('Cobrar un recargo adicional cuando la fecha seleccionada sea domingo', 'envio-fee'); ?>
+                                </label>
+                                <p class="description"><?php _e('Solo aplica si se aceptan pedidos para los domingos.', 'envio-fee'); ?></p>
+                            </td>
+                        </tr>
+                        <tr class="envio-fee-domingo-opcion">
+                            <th scope="row">
+                                <label for="envio_fee_recargo_domingo_monto"><?php _e('Monto del recargo de domingo', 'envio-fee'); ?></label>
+                            </th>
+                            <td>
+                                <input type="number" step="0.01" min="0" name="envio_fee_recargo_domingo_monto" id="envio_fee_recargo_domingo_monto" value="<?php echo esc_attr($recargo_domingo_monto); ?>" class="small-text">
+                                <p class="description"><?php _e('Se suma al total del pedido (además del costo de zona) cuando la entrega o retiro es un domingo.', 'envio-fee'); ?></p>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
+                <script>
+                (function(){
+                    var permitirDomingos = document.getElementById('envio_fee_permitir_domingos');
+                    var recargoActivo = document.getElementById('envio_fee_recargo_domingo_activo');
+                    var filas = document.querySelectorAll('.envio-fee-domingo-opcion');
+                    var filaMonto = document.getElementById('envio_fee_recargo_domingo_monto').closest('tr');
+
+                    function actualizar(){
+                        for (var i = 0; i < filas.length; i++) {
+                            filas[i].style.display = permitirDomingos.checked ? '' : 'none';
+                        }
+                        if (permitirDomingos.checked) {
+                            filaMonto.style.display = recargoActivo.checked ? '' : 'none';
+                        }
+                    }
+
+                    permitirDomingos.addEventListener('change', actualizar);
+                    recargoActivo.addEventListener('change', actualizar);
+                    actualizar();
+                })();
+                </script>
                 
                 <h2><?php _e('Configuración de Zonas de Envío', 'envio-fee'); ?></h2>
                 <style>
@@ -492,15 +632,25 @@ function envio_fee_settings_page() {
 // Checkout fields
 add_action('woocommerce_review_order_after_payment', function(){
     $permitir_mismo_dia = get_option('envio_fee_permitir_mismo_dia', 0);
-    $hoy = date('Y-m-d');
-    $manana = date('Y-m-d', strtotime('+1 day'));
-    $fecha_minima = $permitir_mismo_dia ? $hoy : $manana;
-    $fecha_default = $permitir_mismo_dia ? $hoy : $manana;
-    
+    $permitir_domingos = envio_fee_domingos_permitidos() ? 1 : 0;
+    $recargo_domingo = envio_fee_recargo_domingo();
+
+    // La fecha mínima ya salta los domingos cuando no se aceptan
+    $fecha_minima = envio_fee_fecha_minima();
+    $fecha_default = $fecha_minima;
+
+    // Conservar la fecha ya elegida cuando el checkout se vuelve a renderizar por AJAX
+    if (function_exists('WC') && WC()->session) {
+        $fecha_guardada = envio_fee_normalizar_fecha( (string) WC()->session->get('envio_fee_fecha') );
+        if ($fecha_guardada !== '' && $fecha_guardada >= $fecha_minima && ($permitir_domingos || ! envio_fee_es_domingo($fecha_guardada))) {
+            $fecha_default = $fecha_guardada;
+        }
+    }
+
     // Formatear fecha default a dd/mm/yyyy
     $fecha_default_formateada = date('d/m/Y', strtotime($fecha_default));
     $fecha_minima_formateada = date('d/m/Y', strtotime($fecha_minima));
-    
+
     $zones = envio_fee_get_zones();
     ?>
     <div id="envio-fee-fields">
@@ -526,6 +676,15 @@ add_action('woocommerce_review_order_after_payment', function(){
             .ui-datepicker {
                 z-index: 9999 !important;
             }
+            #envio-fee-domingo-aviso {
+                display: none;
+                margin-top: 6px;
+                font-size: 0.9em;
+                color: #b26a00;
+            }
+            #envio-fee-domingo-aviso.visible {
+                display: block;
+            }
         </style>
         <p class="form-row form-row-wide validate-required">
             <label for="fecha_envio_custom" class="">
@@ -536,9 +695,15 @@ add_action('woocommerce_review_order_after_payment', function(){
             <input type="text" id="fecha_envio_custom" name="fecha_envio_custom" class="input-text update_totals_on_change" 
                    placeholder="dd/mm/yyyy" value="<?php echo esc_attr($fecha_default_formateada); ?>" 
                    pattern="\d{2}/\d{2}/\d{4}" required aria-required="true" 
-                   data-min-date="<?php echo esc_attr($fecha_minima); ?>" 
-                   data-permitir-mismo-dia="<?php echo esc_attr($permitir_mismo_dia); ?>">
+                   data-min-date="<?php echo esc_attr($fecha_minima); ?>"
+                   data-permitir-mismo-dia="<?php echo esc_attr($permitir_mismo_dia); ?>"
+                   data-permitir-domingos="<?php echo esc_attr($permitir_domingos); ?>">
             <input type="hidden" id="fecha_envio_custom_iso" name="fecha_envio_custom_iso" value="<?php echo esc_attr($fecha_default); ?>">
+            <?php if ($permitir_domingos && $recargo_domingo > 0): ?>
+                <span id="envio-fee-domingo-aviso" class="<?php echo envio_fee_es_domingo($fecha_default) ? 'visible' : ''; ?>">
+                    <?php printf( esc_html__('Los domingos tienen un recargo de %s.', 'envio-fee'), wp_kses_post( wc_price($recargo_domingo) ) ); ?>
+                </span>
+            <?php endif; ?>
         </p>
         <p class="form-row form-row-wide validate-required">
             <label for="horario_envio_custom" class="">
@@ -612,28 +777,54 @@ add_action('woocommerce_review_order_after_payment', function(){
                 return yyyy + '-' + mm + '-' + dd;
             }
             
-            // Función para validar fecha
-            function validarFecha(fechaStr, permitirMismoDia) {
+            // Convierte yyyy-mm-dd a Date en zona horaria local (evita el desfase de new Date('yyyy-mm-dd'))
+            function parsearFechaISOLocal(fechaISO) {
+                var partes = fechaISO.split('-');
+                return new Date(parseInt(partes[0], 10), parseInt(partes[1], 10) - 1, parseInt(partes[2], 10));
+            }
+
+            // Devuelve el mensaje de error de la fecha, o '' si es válida
+            function mensajeErrorFecha(fechaStr) {
                 var fechaISO = convertirFechaDDMMYYYY(fechaStr);
-                if (!fechaISO) return false;
-                
+                if (!fechaISO) {
+                    return '<?php _e('Formato de fecha inválido. Use dd/mm/yyyy', 'envio-fee'); ?>';
+                }
+
                 var hoy = new Date();
                 hoy.setHours(0, 0, 0, 0);
-                var fechaSeleccionada = new Date(fechaISO);
-                fechaSeleccionada.setHours(0, 0, 0, 0);
-                
-                if (permitirMismoDia) {
-                    return fechaSeleccionada >= hoy;
-                } else {
-                    var manana = new Date(hoy);
-                    manana.setDate(manana.getDate() + 1);
-                    return fechaSeleccionada >= manana;
+                var fechaMinima = new Date(hoy);
+                if (!permitirMismoDia) {
+                    fechaMinima.setDate(fechaMinima.getDate() + 1);
                 }
+
+                var fechaSeleccionada = parsearFechaISOLocal(fechaISO);
+                fechaSeleccionada.setHours(0, 0, 0, 0);
+
+                if (fechaSeleccionada < fechaMinima) {
+                    return permitirMismoDia
+                        ? '<?php _e('La fecha debe ser hoy o una fecha futura', 'envio-fee'); ?>'
+                        : '<?php _e('La fecha debe ser a partir de mañana', 'envio-fee'); ?>';
+                }
+
+                if (!permitirDomingos && fechaSeleccionada.getDay() === 0) {
+                    return '<?php _e('No se aceptan pedidos para los domingos. Selecciona otra fecha.', 'envio-fee'); ?>';
+                }
+
+                return '';
             }
-            
-            // Variable global para permitir mismo día
+
+            // Mostrar u ocultar el aviso de recargo de domingo
+            function actualizarAvisoDomingo(fechaISO) {
+                var $aviso = $('#envio-fee-domingo-aviso');
+                if (!$aviso.length) return;
+                var esDomingo = fechaISO ? parsearFechaISOLocal(fechaISO).getDay() === 0 : false;
+                $aviso.toggleClass('visible', esDomingo);
+            }
+
+            // Variables globales de configuración
             var permitirMismoDia = $('#fecha_envio_custom').data('permitir-mismo-dia') == 1;
-            
+            var permitirDomingos = $('#fecha_envio_custom').data('permitir-domingos') != 0;
+
             // Función para inicializar datepicker
             function inicializarDatepicker() {
                 var $fechaInput = $('#fecha_envio_custom');
@@ -665,9 +856,10 @@ add_action('woocommerce_review_order_after_payment', function(){
                 var fechaMinimaParts = fechaMinima.split('-');
                 var fechaMinimaDate = new Date(parseInt(fechaMinimaParts[0]), parseInt(fechaMinimaParts[1]) - 1, parseInt(fechaMinimaParts[2]));
                 
-                // Actualizar variable permitirMismoDia
+                // Actualizar variables de configuración
                 permitirMismoDia = $fechaInput.data('permitir-mismo-dia') == 1;
-                
+                permitirDomingos = $fechaInput.data('permitir-domingos') != 0;
+
                 // Inicializar datepicker
                 $fechaInput.datepicker({
                     dateFormat: 'dd/mm/yy',
@@ -675,19 +867,25 @@ add_action('woocommerce_review_order_after_payment', function(){
                     changeMonth: true,
                     changeYear: true,
                     showButtonPanel: true,
+                    beforeShowDay: function(date) {
+                        if (!permitirDomingos && date.getDay() === 0) {
+                            return [false, 'envio-fee-dia-bloqueado', '<?php _e('No se aceptan pedidos los domingos', 'envio-fee'); ?>'];
+                        }
+                        return [true, ''];
+                    },
                     onSelect: function(dateText, inst) {
                         var fechaISO = convertirFechaDDMMYYYY(dateText);
-                        if (fechaISO && validarFecha(dateText, permitirMismoDia)) {
+                        var mensaje = mensajeErrorFecha(dateText);
+                        if (!mensaje) {
                             $('#fecha_envio_custom_iso').val(fechaISO);
                             $(this).removeClass('error');
                             $(this)[0].setCustomValidity('');
+                            actualizarAvisoDomingo(fechaISO);
                             pingTotals();
                         } else {
                             $(this).addClass('error');
-                            var mensaje = permitirMismoDia 
-                                ? '<?php _e('La fecha debe ser hoy o una fecha futura', 'envio-fee'); ?>'
-                                : '<?php _e('La fecha debe ser a partir de mañana', 'envio-fee'); ?>';
                             $(this)[0].setCustomValidity(mensaje);
+                            actualizarAvisoDomingo(null);
                         }
                     }
                 });
@@ -714,21 +912,17 @@ add_action('woocommerce_review_order_after_payment', function(){
                 // Validar cuando tiene formato completo
                 if (fechaStr.length === 10) {
                     var fechaISO = convertirFechaDDMMYYYY(fechaStr);
-                    if (fechaISO && validarFecha(fechaStr, permitirMismoDia)) {
+                    var mensaje = mensajeErrorFecha(fechaStr);
+                    if (!mensaje) {
                         $('#fecha_envio_custom_iso').val(fechaISO);
                         $input.removeClass('error');
                         $input[0].setCustomValidity('');
+                        actualizarAvisoDomingo(fechaISO);
                         pingTotals();
                     } else {
                         $input.addClass('error');
-                        if (!fechaISO) {
-                            $input[0].setCustomValidity('<?php _e('Formato de fecha inválido. Use dd/mm/yyyy', 'envio-fee'); ?>');
-                        } else {
-                            var mensaje = permitirMismoDia 
-                                ? '<?php _e('La fecha debe ser hoy o una fecha futura', 'envio-fee'); ?>'
-                                : '<?php _e('La fecha debe ser a partir de mañana', 'envio-fee'); ?>';
-                            $input[0].setCustomValidity(mensaje);
-                        }
+                        $input[0].setCustomValidity(mensaje);
+                        actualizarAvisoDomingo(null);
                     }
                 } else if (fechaStr.length > 0) {
                     $input[0].setCustomValidity('<?php _e('Formato incompleto. Use dd/mm/yyyy', 'envio-fee'); ?>');
@@ -794,6 +988,16 @@ add_action('woocommerce_checkout_update_order_review', function($post_data){
         $zona = isset($data['custom_shipping_zone']) ? sanitize_text_field($data['custom_shipping_zone']) : '';
         WC()->session->set('custom_shipping_type', $tipo);
         WC()->session->set('custom_shipping_zone', $zona);
+
+        // Guardar la fecha elegida para poder calcular el recargo de domingo
+        $fecha = '';
+        if (isset($data['fecha_envio_custom_iso'])) {
+            $fecha = envio_fee_normalizar_fecha( sanitize_text_field($data['fecha_envio_custom_iso']) );
+        }
+        if ($fecha === '' && isset($data['fecha_envio_custom'])) {
+            $fecha = envio_fee_normalizar_fecha( sanitize_text_field($data['fecha_envio_custom']) );
+        }
+        WC()->session->set('envio_fee_fecha', $fecha);
     }
 }, 10, 1);
 
@@ -848,6 +1052,11 @@ function envio_fee_validate_checkout_fields() {
                 wc_add_notice(__('La fecha de envío debe ser a partir de mañana. No se puede seleccionar el día actual.', 'envio-fee'), 'error');
             }
         }
+
+        // Validar domingos según configuración
+        if ( ! envio_fee_domingos_permitidos() && date('w', $timestamp) === '0' ) {
+            wc_add_notice(__('No se aceptan pedidos para los domingos. Selecciona otra fecha.', 'envio-fee'), 'error');
+        }
     }
 
     // Validar horario de envío o retiro (obligatorio siempre)
@@ -890,6 +1099,12 @@ add_action('woocommerce_cart_calculate_fees', function($cart){
         if ($fee > 0) {
             $cart->add_fee(__('Costo de Envío', 'envio-fee'), $fee, true, '');
         }
+    }
+
+    // Recargo por entrega o retiro en domingo
+    $recargo_domingo = envio_fee_recargo_domingo();
+    if ($recargo_domingo > 0 && envio_fee_es_domingo( envio_fee_get_fecha_seleccionada() )) {
+        $cart->add_fee(__('Recargo Domingo', 'envio-fee'), $recargo_domingo, true, '');
     }
 }, 20, 1);
 
@@ -1022,4 +1237,10 @@ add_action('woocommerce_checkout_create_order', function($order, $data){
     $order->update_meta_data('_custom_shipping_type', $tipo_envio);
     $order->update_meta_data('_custom_shipping_zone', sanitize_text_field($_POST['custom_shipping_zone'] ?? ''));
     $order->update_meta_data('_direccion_delivery_custom', $direccion_delivery);
+
+    // Registrar el recargo de domingo aplicado (si corresponde)
+    $recargo_domingo = envio_fee_recargo_domingo();
+    if ($recargo_domingo > 0 && envio_fee_es_domingo($fecha_envio)) {
+        $order->update_meta_data('_envio_fee_recargo_domingo', $recargo_domingo);
+    }
 }, 10, 2);

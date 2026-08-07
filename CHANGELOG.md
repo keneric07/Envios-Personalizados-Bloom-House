@@ -1,5 +1,13 @@
 # Changelog - Envío Personalizado con Fee
 
+## 3.18.0 - 7 Ago 2026
+- Nueva opción "Se aceptan pedidos para los domingos": si se desactiva, los domingos quedan bloqueados en el calendario del checkout y se rechazan en la validación del pedido.
+- Nueva opción "Aplicar recargo los domingos" con monto configurable: se suma automáticamente al total (además del costo de zona) cuando la fecha elegida es domingo.
+- Aviso en el checkout indicando el recargo cuando el cliente selecciona un domingo.
+- La fecha por defecto salta automáticamente al siguiente día disponible si el domingo no está permitido.
+- La fecha elegida se conserva al recalcularse el checkout por AJAX.
+- Corregido desfase de zona horaria al validar la fecha en el navegador.
+
 ## 3.0.17 - 11 Mar 2026
 - Integrada librería `intl-tel-input` en el checkout para el campo de teléfono de facturación con selector de banderas.
 - Geolocalización automática del país por IP usando `ipapi.co` con fallback a Panamá.
